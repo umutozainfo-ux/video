@@ -30,6 +30,7 @@ instance/
 # Downloads and processed videos
 downloads/
 processed/
+captions/
 
 # IDE
 .vscode/

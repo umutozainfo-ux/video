@@ -381,6 +381,51 @@
             background: rgba(255, 255, 255, 0.3);
             transform: scale(1.1);
         }
+
+        .nav-btn {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255, 255, 255, 0.8);
+            border: none;
+            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            color: #4f46e5;
+            transition: all 0.3s ease;
+            z-index: 10;
+        }
+
+        .nav-btn:hover {
+            background: #4f46e5;
+            color: white;
+            box-shadow: 0 6px 16px rgba(79, 70, 229, 0.3);
+        }
+
+        @keyframes bounce {
+
+            0%,
+            20%,
+            50%,
+            80%,
+            100% {
+                transform: translateY(0) translateX(-50%);
+            }
+
+            40% {
+                transform: translateY(-10px) translateX(-50%);
+            }
+
+            60% {
+                transform: translateY(-5px) translateX(-50%);
+            }
+        }
     </style>
 </head>
 
@@ -416,6 +461,10 @@
                     style="flex:1;">
                 <button id="downloadBtn" class="btn" style="flex:0 0 auto;min-width:180px;" onclick="startDownload()">
                     Download & Convert
+                </button>
+                <input type="file" id="fileUpload" style="display:none;" accept="video/*" onchange="handleFileUpload(this)">
+                <button class="btn" style="flex:0 0 auto; background:linear-gradient(135deg,#9333ea,#7e22ce);" onclick="document.getElementById('fileUpload').click()">
+                    📁 Upload File
                 </button>
             </div>
             <div style="font-size:14px;color:#777;">Downloads are saved into the selected project. Titles are auto-named
@@ -457,27 +506,76 @@
         <!-- Split Settings -->
         <div id="splitSettings"
             style="display:none;margin-top:20px;padding:20px;background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;">
-            <h4 style="margin-bottom:10px;">Scene Detection Settings</h4>
-            <div style="display:grid;grid-template-columns: 1fr 1fr; gap: 20px;">
-                <div>
-                    <label style="font-size:14px;color:#64748b;display:block;margin-bottom:5px;">Min Clip Length
-                        (sec):</label>
-                    <input type="number" id="minSceneLen" value="2" min="0.1" step="0.1" class="url-input"
-                        style="padding:8px 12px;width:100%;">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:15px;">
+                <h4 id="splitTypeTitle">Scene Detection Settings</h4>
+                <button class="btn"
+                    style="width:auto; padding:4px 12px; font-size:12px; background:#cbd5e1; color:#475569;"
+                    onclick="document.getElementById('splitSettings').style.display='none'">✕</button>
+            </div>
+
+            <div id="sceneDetectOptions">
+                <div style="display:grid;grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div>
+                        <label style="font-size:14px;color:#64748b;display:block;margin-bottom:5px;">Min Clip Length
+                            (sec):</label>
+                        <input type="number" id="minSceneLen" value="2" min="0.1" step="0.1" class="url-input"
+                            style="padding:8px 12px;width:100%;">
+                    </div>
+                    <div>
+                        <label style="font-size:14px;color:#64748b;display:block;margin-bottom:5px;">Sensitivity (3.0 =
+                            Default):</label>
+                        <input type="range" id="splitThreshold" min="1" max="100" value="3" style="width:100%;"
+                            oninput="document.getElementById('thresholdVal').innerText = this.value">
+                        <span id="thresholdVal" style="font-size:12px;color:#666;">3</span>
+                    </div>
                 </div>
-                <div>
-                    <label style="font-size:14px;color:#64748b;display:block;margin-bottom:5px;">Sensitivity (3.0 =
-                        Default):</label>
-                    <input type="range" id="splitThreshold" min="1" max="100" value="3" style="width:100%;"
-                        oninput="document.getElementById('thresholdVal').innerText = this.value">
-                    <span id="thresholdVal" style="font-size:12px;color:#666;">3</span>
+                <div style="margin-top:15px;display:flex;gap:10px;">
+                    <button class="btn" style="width:auto;padding:8px 16px;font-size:14px;"
+                        onclick="confirmSplit()">Start
+                        AI Splitting</button>
                 </div>
             </div>
-            <div style="margin-top:15px;display:flex;gap:10px;">
-                <button class="btn" style="width:auto;padding:8px 16px;font-size:14px;" onclick="confirmSplit()">Start
-                    Splitting</button>
-                <button class="btn" style="width:auto;padding:8px 16px;font-size:14px;background:#cbd5e1;color:#475569;"
-                    onclick="document.getElementById('splitSettings').style.display='none'">Cancel</button>
+
+            <div id="fixedSplitOptions" style="display:none;">
+                <div style="margin-bottom:15px;">
+                    <label style="font-size:14px;color:#64748b;display:block;margin-bottom:5px;">Split Every X
+                        Seconds:</label>
+                    <input type="number" id="splitInterval" value="30" min="1" step="1" class="url-input"
+                        style="padding:8px 12px;width:100px;">
+                </div>
+                <button class="btn"
+                    style="width:auto;padding:8px 16px;font-size:14px; background:linear-gradient(135deg,#8b5cf6,#6366f1);"
+                    onclick="confirmFixedSplit()">Start Fixed Split</button>
+            </div>
+
+            <div id="trimOptions" style="display:none;">
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:15px;">
+                    <div>
+                        <label style="font-size:12px; color:#64748b; display:block; margin-bottom:4px;">Start Time
+                            (s)</label>
+                        <div style="display:flex; gap:5px;">
+                            <input type="number" id="trimStart" value="0" min="0" step="0.1" class="url-input"
+                                style="padding:6px; font-size:13px;">
+                            <button class="btn"
+                                style="width:auto; padding:6px; font-size:11px; background:#e2e8f0; color:#475569;"
+                                onclick="setTrimTime('start')">Mark</button>
+                        </div>
+                    </div>
+                    <div>
+                        <label style="font-size:12px; color:#64748b; display:block; margin-bottom:4px;">End Time
+                            (s)</label>
+                        <div style="display:flex; gap:5px;">
+                            <input type="number" id="trimEnd" value="10" min="0" step="0.1" class="url-input"
+                                style="padding:6px; font-size:13px;">
+                            <button class="btn"
+                                style="width:auto; padding:6px; font-size:11px; background:#e2e8f0; color:#475569;"
+                                onclick="setTrimTime('end')">Mark</button>
+                        </div>
+                    </div>
+                </div>
+                <button class="btn"
+                    style="width:auto; padding:10px 20px; font-size:14px; background:linear-gradient(135deg,#10b981,#059669);"
+                    onclick="confirmTrim()">Cut Segment</button>
             </div>
         </div>
 
@@ -492,20 +590,148 @@
                         onclick="promptCaption('word')">Word captions</button>
                     <button class="btn" style="width:auto;padding:10px 12px;font-size:14px;"
                         onclick="promptCaption('sentence')">Sentence captions</button>
-                    <button class="btn"
-                        style="width:auto;padding:10px 12px;font-size:14px;background:linear-gradient(135deg,#60a5fa,#3b82f6);"
-                        onclick="showSplitSettings()">Split into Scenes</button>
+
+                    <div style="position:relative; display:inline-block;">
+                        <button class="btn"
+                            style="width:auto;padding:10px 12px;font-size:14px;background:linear-gradient(135deg,#60a5fa,#3b82f6);"
+                            onclick="toggleSplitMenu()">Split Video ▼</button>
+                        <div id="splitMenu"
+                            style="display:none; position:absolute; right:0; top:45px; background:white; border-radius:8px; box-shadow:0 10px 25px rgba(0,0,0,0.15); z-index:100; min-width:180px; padding:8px; border:1px solid #eee;">
+                            <button class="btn"
+                                style="background:none; color:#333; text-align:left; font-size:13px; padding:10px; box-shadow:none; margin:0;"
+                                onclick="showSplitSettings('ai')">AI Scene Detection</button>
+                            <button class="btn"
+                                style="background:none; color:#333; text-align:left; font-size:13px; padding:10px; box-shadow:none; margin:0;"
+                                onclick="showSplitSettings('fixed')">Every X Seconds</button>
+                            <button class="btn"
+                                style="background:none; color:#333; text-align:left; font-size:13px; padding:10px; box-shadow:none; margin:0;"
+                                onclick="showSplitSettings('trim')">Manual Cut (Custom)</button>
+                        </div>
+                    </div>
+
                     <button class="btn"
                         style="width:auto;padding:10px 12px;font-size:14px;background:linear-gradient(135deg,#f87171,#ef4444);"
                         onclick="deleteCurrentVideo()">Delete video</button>
                 </div>
             </div>
-            <video id="videoPlayer" controls preload="metadata">
-                Your browser does not support the video tag.
-            </video>
+
+            <div style="position:relative; max-width:400px; margin:0 auto;">
+                <video id="videoPlayer" controls preload="metadata">
+                    Your browser does not support the video tag.
+                </video>
+                <button class="nav-btn" onclick="navigateVideo(-1)" style="left:-60px;"
+                    title="Previous video">◀</button>
+                <button class="nav-btn" onclick="navigateVideo(1)" style="right:-60px;" title="Next video">▶</button>
+            </div>
+
+            <br>
+
+            <!-- CapCut-style Timeline -->
+            <div id="timelineContainer"
+                style="display:none; margin-top:20px; padding:15px; background:#1e293b; border-radius:12px; color:white;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <div
+                        style="font-size:12px; font-weight:600; color:#94a3b8; text-transform:uppercase; letter-spacing:0.05em;">
+                        Timeline Editor</div>
+                    <div id="timelineTime" style="font-family:monospace; font-size:14px; color:#38bdf8;">00:00 / 00:00
+                    </div>
+                </div>
+
+                <div id="timelineTrack" class="timeline-track"
+                    style="position:relative; height:40px; background:#334155; border-radius:6px; cursor:crosshair; overflow:hidden;">
+                    <!-- Waveform placeholder/Track background -->
+                    <div
+                        style="position:absolute; top:0; left:0; right:0; bottom:0; opacity:0.1; background: repeating-linear-gradient(90deg, transparent, transparent 10px, #fff 11px);">
+                    </div>
+
+                    <!-- Selection Area -->
+                    <div id="selectionOverlay"
+                        style="position:absolute; top:0; height:100%; background:rgba(56, 189, 248, 0.2); border-left:2px solid #38bdf8; border-right:2px solid #38bdf8; pointer-events:none; left:0; width:0;">
+                    </div>
+
+                    <!-- Playhead -->
+                    <div id="playhead"
+                        style="position:absolute; top:0; left:0; width:2px; height:100%; background:#ef4444; z-index:10; pointer-events:none;">
+                        <div
+                            style="position:absolute; top:-5px; left:-4px; width:10px; height:10px; background:#ef4444; border-radius:50%;">
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display:flex; justify-content:center; gap:15px; margin-top:15px;">
+                    <button class="btn" style="width:auto; padding:8px 15px; font-size:12px; background:#334155;"
+                        onclick="setTimelineMarker('in')">Set IN (I)</button>
+                    <button class="btn" style="width:auto; padding:8px 15px; font-size:12px; background:#334155;"
+                        onclick="setTimelineMarker('out')">Set OUT (O)</button>
+                    <button class="btn"
+                        style="width:auto; padding:8px 20px; font-size:12px; background:linear-gradient(135deg,#38bdf8,#0284c7);"
+                        onclick="confirmTrimFromTimeline()">Extract Selection</button>
+                </div>
+            </div>
+
             <br>
             <a id="downloadLink" class="download-btn" download>Download Video</a>
             <div id="captionLinks" style="margin-top:12px;text-align:left;color:#555;font-size:14px;"></div>
+        </div>
+    </div>
+
+    <!-- Caption Designer Modal -->
+    <div id="captionDesignerModal"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:2000; align-items:center; justify-content:center; backdrop-filter:blur(5px);">
+        <div
+            style="background:white; padding:30px; border-radius:16px; width:100%; max-width:500px; box-shadow:0 20px 50px rgba(0,0,0,0.3); position:relative;">
+            <button
+                style="position:absolute; top:15px; right:15px; background:none; border:none; font-size:24px; cursor:pointer;"
+                onclick="closeCaptionDesigner()">✕</button>
+            <h2 style="margin-bottom:20px; background:linear-gradient(135deg,#6366f1,#a855f7); -webkit-background-clip:text; -webkit-text-fill-color:transparent;">Caption Designer</h2>
+            
+            <div style="margin-bottom:20px;">
+                <label style="display:block; font-size:12px; font-weight:700; color:#64748b; margin-bottom:8px;">CHOOSE A PRESET</label>
+                <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:10px;">
+                    <button class="btn" style="background:#fef08a; color:#854d0e; font-size:11px; padding:8px;" onclick="applyPreset('hormozi')">Hormozi (Yellow)</button>
+                    <button class="btn" style="background:#000; color:#fff; font-size:11px; padding:8px;" onclick="applyPreset('beast')">MrBeast (White)</button>
+                    <button class="btn" style="background:#fff; color:#000; border:1px solid #ddd; border-bottom:3px solid #ddd; font-size:11px; padding:8px;" onclick="applyPreset('minimal')">Minimalist</button>
+                </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px;">
+                <div class="input-group">
+                    <label style="display:block; font-size:12px; font-weight:700; color:#64748b; margin-bottom:4px;">FONT SIZE</label>
+                    <input type="number" id="capFontSize" value="20" class="url-input" style="padding:10px;">
+                </div>
+                <div class="input-group">
+                    <label style="display:block; font-size:12px; font-weight:700; color:#64748b; margin-bottom:4px;">FONT FAMILY</label>
+                    <select id="capFontName" class="url-input" style="padding:10px;">
+                        <option value="Arial Black">Arial Black</option>
+                        <option value="Montserrat">Montserrat</option>
+                        <option value="Impact">Impact</option>
+                        <option value="Verdana">Verdana</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label style="display:block; font-size:12px; font-weight:700; color:#64748b; margin-bottom:4px;">TEXT COLOR</label>
+                    <input type="color" id="capPrimaryColor" value="#ffff00" style="width:100%; height:40px; border:none; border-radius:8px; cursor:pointer;">
+                </div>
+                <div class="input-group">
+                    <label style="display:block; font-size:12px; font-weight:700; color:#64748b; margin-bottom:4px;">OUTLINE</label>
+                    <input type="color" id="capOutlineColor" value="#000000" style="width:100%; height:40px; border:none; border-radius:8px; cursor:pointer;">
+                </div>
+            </div>
+
+            <div class="input-group">
+                <label style="display:block; font-size:12px; font-weight:700; color:#64748b; margin-bottom:4px;">ALIGNMENT</label>
+                <select id="capAlignment" class="url-input" style="padding:10px;">
+                    <option value="2">Bottom Center</option>
+                    <option value="10">Middle</option>
+                    <option value="6">Top Center</option>
+                </select>
+            </div>
+
+            <div id="designerPreview" style="margin:15px 0; padding:20px; background:#000; border-radius:8px; text-align:center;">
+                <span id="previewText" style="color:yellow; font-weight:bold; font-size:20px; font-family:'Arial Black', sans-serif; text-shadow: 2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 0 2px 0 #000, 0 -2px 0 #000, 2px 0 0 #000, -2px 0 0 #000;">VIRAL CAPTION PREVIEW</span>
+            </div>
+
+            <button class="btn" style="width:100%; padding:15px; background:linear-gradient(135deg,#6366f1,#a855f7);" onclick="confirmStyledBurn()">🔥 Burn Styled Captions</button>
         </div>
     </div>
 
@@ -608,42 +834,78 @@
 
         async function loadVideos(projectId) {
             const list = document.getElementById('videoList');
-            list.innerHTML = '';
+            list.innerHTML = '<li style="padding:12px;color:#777;">Loading videos...</li>';
             if (!projectId) return;
             try {
                 const res = await fetch(`/api/projects/${projectId}/videos`);
                 const videos = await res.json();
+
                 if (!videos.length) {
                     list.innerHTML = `<li style="padding:12px;color:#777;">No videos yet. Download one above.</li>`;
                     return;
                 }
-                videos.forEach(v => {
-                    const li = document.createElement('li');
-                    li.style.padding = '12px 14px';
-                    li.style.borderBottom = '1px solid #f0f0f0';
-                    li.style.cursor = 'pointer';
-                    li.id = `video-${v.id}`;
-                    li.dataset.id = v.id;
-                    li.dataset.filename = v.filename;
-                    li.dataset.title = v.title || v.filename;
-                    li.innerHTML = `
-                        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
-                            <div>
-                                <div style="font-weight:600;color:#333;">${v.title || v.filename}</div>
-                                <div style="color:#888;font-size:12px;">${v.filename}</div>
-                            </div>
-                            <div style="display:flex;gap:8px;">
-                                <button class="btn" style="width:auto;padding:8px 10px;font-size:12px;" onclick="event.stopPropagation(); openVideo('${v.id}', '${v.filename}', '${v.title || ''}', '${projectId}')">Open</button>
-                                <button class="btn" style="width:auto;padding:8px 10px;font-size:12px;background:linear-gradient(135deg,#f87171,#ef4444);" onclick="event.stopPropagation(); deleteVideo('${projectId}','${v.id}')">Delete</button>
-                            </div>
-                        </div>
-                    `;
-                    li.onclick = () => openVideo(v.id, v.filename, v.title || '', projectId);
-                    list.appendChild(li);
-                });
+
+                list.innerHTML = '';
+                const originals = videos.filter(v => !v.is_clip && !v.filename.includes('_clip_'));
+                const clips = videos.filter(v => v.is_clip || v.filename.includes('_clip_'));
+
+                if (originals.length > 0) {
+                    const head = document.createElement('li');
+                    head.style.padding = '8px 14px';
+                    head.style.background = '#f8fafc';
+                    head.style.fontWeight = '700';
+                    head.style.fontSize = '12px';
+                    head.style.color = '#64748b';
+                    head.style.textTransform = 'uppercase';
+                    head.textContent = 'Original Videos';
+                    list.appendChild(head);
+
+                    originals.forEach(v => list.appendChild(createVideoItem(v, projectId)));
+                }
+
+                if (clips.length > 0) {
+                    const head = document.createElement('li');
+                    head.style.padding = '8px 14px';
+                    head.style.background = '#f8fafc';
+                    head.style.fontWeight = '700';
+                    head.style.fontSize = '12px';
+                    head.style.color = '#64748b';
+                    head.style.textTransform = 'uppercase';
+                    head.style.marginTop = '10px';
+                    head.textContent = 'Generated Clips';
+                    list.appendChild(head);
+
+                    clips.forEach(v => list.appendChild(createVideoItem(v, projectId)));
+                }
             } catch (err) {
                 showError('Failed to load videos');
             }
+        }
+
+        function createVideoItem(v, projectId) {
+            const li = document.createElement('li');
+            li.style.padding = '12px 14px';
+            li.style.borderBottom = '1px solid #f0f0f0';
+            li.style.cursor = 'pointer';
+            li.id = `video-${v.id}`;
+            li.dataset.id = v.id;
+            li.dataset.filename = v.filename;
+            li.dataset.title = v.title || v.filename;
+            li.dataset.isClip = v.is_clip || v.filename.includes('_clip_');
+            li.innerHTML = `
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+                    <div style="flex: 1; overflow: hidden;">
+                        <div style="font-weight:600;color:#333;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;">${v.title || v.filename}</div>
+                        <div style="color:#888;font-size:12px;">${v.filename}</div>
+                    </div>
+                    <div style="display:flex;gap:8px;flex-shrink:0;">
+                        <button class="btn" style="width:auto;padding:8px 10px;font-size:12px;" onclick="event.stopPropagation(); openVideo('${v.id}', '${v.filename}', '${v.title || ''}', '${projectId}')">Open</button>
+                        <button class="btn" style="width:auto;padding:8px 10px;font-size:12px;background:linear-gradient(135deg,#f87171,#ef4444);" onclick="event.stopPropagation(); deleteVideo('${projectId}','${v.id}')">Delete</button>
+                    </div>
+                </div>
+            `;
+            li.onclick = () => openVideo(v.id, v.filename, v.title || '', projectId);
+            return li;
         }
 
         async function createProject() {
@@ -833,6 +1095,161 @@
 
             // Store current video info for actions
             window.__currentVideo = { id, filename, projectId };
+
+            // Scroll to video player
+            document.getElementById('videoContainer').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+            // Initialize timeline logic
+            initTimeline();
+        }
+
+        function navigateVideo(direction) {
+            const items = Array.from(document.querySelectorAll('#videoList li[data-id]'));
+            if (!items.length || !window.__currentVideo) return;
+
+            const currentIndex = items.findIndex(item => item.dataset.id === window.__currentVideo.id);
+            let nextIndex = currentIndex + direction;
+
+            if (nextIndex < 0) nextIndex = items.length - 1;
+            if (nextIndex >= items.length) nextIndex = 0;
+
+            const nextItem = items[nextIndex];
+            openVideo(nextItem.dataset.id, nextItem.dataset.filename, nextItem.dataset.title, currentProjectId);
+        }
+
+        /* TIMELINE LOGIC */
+        let timelineMarkers = { in: 0, out: 0 };
+
+        function initTimeline() {
+            const player = document.getElementById('videoPlayer');
+            const track = document.getElementById('timelineTrack');
+            const container = document.getElementById('timelineContainer');
+            if (!container) return;
+
+            container.style.display = 'block';
+            timelineMarkers = { in: 0, out: player.duration || 0 };
+
+            player.ontimeupdate = () => {
+                const percent = (player.currentTime / player.duration) * 100;
+                const playhead = document.getElementById('playhead');
+                if (playhead) playhead.style.left = percent + '%';
+                updateTimelineDisplay();
+            };
+
+            player.onloadedmetadata = () => {
+                timelineMarkers.out = player.duration;
+                updateTimelineDisplay();
+            };
+
+            track.onclick = (e) => {
+                const rect = track.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const percent = x / rect.width;
+                player.currentTime = percent * player.duration;
+            };
+
+            // Keyboard shortcuts for timeline
+            const handleKeys = (e) => {
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+                const key = e.key.toLowerCase();
+                if (key === 'i') setTimelineMarker('in');
+                if (key === 'o') setTimelineMarker('out');
+                if (key === ' ') {
+                    e.preventDefault();
+                    player.paused ? player.play() : player.pause();
+                }
+            };
+            document.removeEventListener('keydown', window._timelineKeys);
+            window._timelineKeys = handleKeys;
+            document.addEventListener('keydown', handleKeys);
+
+            updateTimelineDisplay();
+        }
+
+        function setTimelineMarker(type) {
+            const player = document.getElementById('videoPlayer');
+            timelineMarkers[type] = player.currentTime;
+            updateTimelineDisplay();
+        }
+
+        function updateTimelineDisplay() {
+            const player = document.getElementById('videoPlayer');
+            const overlay = document.getElementById('selectionOverlay');
+            const timeDisplay = document.getElementById('timelineTime');
+
+            if (!player || !player.duration || !overlay || !timeDisplay) return;
+
+            const inPercent = (timelineMarkers.in / player.duration) * 100;
+            const outPercent = (timelineMarkers.out / player.duration) * 100;
+            const width = Math.max(0, outPercent - inPercent);
+
+            overlay.style.left = inPercent + '%';
+            overlay.style.width = width + '%';
+
+            const format = (s) => {
+                if (isNaN(s)) return "00:00";
+                const mins = Math.floor(s / 60).toString().padStart(2, '0');
+                const secs = Math.floor(s % 60).toString().padStart(2, '0');
+                return `${mins}:${secs}`;
+            }
+            timeDisplay.innerText = `${format(player.currentTime)} / ${format(player.duration)} (Selected: ${format(timelineMarkers.in)} - ${format(timelineMarkers.out)})`;
+        }
+
+        async function confirmTrimFromTimeline() {
+            const player = document.getElementById('videoPlayer');
+            const start = timelineMarkers.in;
+            const end = timelineMarkers.out;
+
+            if (end <= start) {
+                showError("End point must be after start point");
+                return;
+            }
+
+            const title = prompt("Name your clip:", "Timeline Clip");
+            if (title === null) return;
+
+            document.getElementById('progressContainer').classList.add('active');
+            updateProgress(0, "Splitting from timeline...");
+
+            const { id: videoId, projectId } = window.__currentVideo;
+
+            try {
+                const res = await fetch(`/api/projects/${projectId}/videos/${videoId}/trim`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        start_time: start,
+                        end_time: end,
+                        title: title
+                    })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Failed to start cutting');
+
+                // Track status
+                const statusId = data.id;
+                const poll = setInterval(async () => {
+                    try {
+                        const sres = await fetch(`/api/status/${encodeURIComponent(statusId)}`);
+                        if (!sres.ok) return;
+                        const sdata = await sres.json();
+                        updateProgress(sdata.progress || 0, sdata.status || 'processing');
+                        if (sdata.status === 'completed') {
+                            clearInterval(poll);
+                            loadVideos(projectId);
+                            showError('Timeline clip extracted!', false);
+                            setTimeout(() => document.getElementById('progressContainer').classList.remove('active'), 2000);
+                        } else if (sdata.status === 'error') {
+                            clearInterval(poll);
+                            showError(sdata.error || 'Extraction failed');
+                        }
+                    } catch (e) {
+                        console.error(e);
+                    }
+                }, 2000);
+            } catch (err) {
+                showError(err.message);
+            }
         }
 
         async function deleteVideo(projectId, videoId) {
@@ -915,12 +1332,80 @@
             }
         }
 
+        let pendingCaptionFile = null;
+
+        function closeCaptionDesigner() {
+            document.getElementById('captionDesignerModal').style.display = 'none';
+        }
+
+        function applyPreset(name) {
+            const font = document.getElementById('capFontName');
+            const size = document.getElementById('capFontSize');
+            const primary = document.getElementById('capPrimaryColor');
+            const outline = document.getElementById('capOutlineColor');
+            const align = document.getElementById('capAlignment');
+
+            if (name === 'hormozi') {
+                font.value = "Arial Black";
+                size.value = 22;
+                primary.value = "#ffff00";
+                outline.value = "#000000";
+                align.value = "2";
+            } else if (name === 'beast') {
+                font.value = "Arial Black";
+                size.value = 20;
+                primary.value = "#ffffff";
+                outline.value = "#000000";
+                align.value = "2";
+            } else if (name === 'minimal') {
+                font.value = "Montserrat";
+                size.value = 16;
+                primary.value = "#ffffff";
+                outline.value = "#000000";
+                align.value = "2";
+            }
+            updateDesignerPreview();
+        }
+
+        function updateDesignerPreview() {
+            const preview = document.getElementById('previewText');
+            const color = document.getElementById('capPrimaryColor').value;
+            const outline = document.getElementById('capOutlineColor').value;
+            const size = document.getElementById('capFontSize').value;
+            const font = document.getElementById('capFontName').value;
+
+            preview.style.color = color;
+            preview.style.fontSize = size + 'px';
+            preview.style.fontFamily = font;
+            // Simplified shadow preview
+            preview.style.textShadow = `2px 2px 0 ${outline}, -2px -2px 0 ${outline}, 2px -2px 0 ${outline}, -2px 2px 0 ${outline}`;
+        }
+
+        // Add listeners for live preview
+        ['capPrimaryColor', 'capOutlineColor', 'capFontSize', 'capFontName'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.oninput = updateDesignerPreview;
+        });
+
         async function burnCaptions(captionFile) {
-            if (!window.__currentVideo) return;
+            pendingCaptionFile = captionFile;
+            document.getElementById('captionDesignerModal').style.display = 'flex';
+            updateDesignerPreview();
+        }
+
+        async function confirmStyledBurn() {
+            if (!window.__currentVideo || !pendingCaptionFile) return;
             const { projectId, id: videoId } = window.__currentVideo;
 
-            if (!confirm(`Burn ${captionFile} into the video? This will create a new video file.`)) return;
+            const style = {
+                fontSize: document.getElementById('capFontSize').value,
+                fontName: document.getElementById('capFontName').value,
+                primaryColor: document.getElementById('capPrimaryColor').value,
+                outlineColor: document.getElementById('capOutlineColor').value,
+                alignment: document.getElementById('capAlignment').value
+            };
 
+            closeCaptionDesigner();
             document.getElementById('progressContainer').classList.add('active');
             updateProgress(0, 'starting');
 
@@ -928,7 +1413,10 @@
                 const res = await fetch(`/api/projects/${projectId}/videos/${videoId}/burn`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ caption_file: captionFile })
+                    body: JSON.stringify({ 
+                        caption_file: pendingCaptionFile,
+                        style: style
+                    })
                 });
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || 'Failed to start burning');
@@ -939,32 +1427,173 @@
                         const sres = await fetch(`/api/status/${encodeURIComponent(statusId)}`);
                         if (!sres.ok) return;
                         const sdata = await sres.json();
-
                         updateProgress(sdata.progress || 0, sdata.status || 'burning');
+                        if (sdata.status === 'completed') {
+                            clearInterval(poll);
+                            loadVideos(projectId);
+                            showError('Styled captions burned successfully!', false);
+                            setTimeout(() => document.getElementById('progressContainer').classList.remove('active'), 2000);
+                        } else if (sdata.status === 'error') {
+                            clearInterval(poll);
+                            showError(sdata.error || 'Burning failed');
+                        }
+                    } catch (err) { console.error(err); }
+                }, 2000);
+            } catch (err) {
+                showError(err.message);
+            }
+        }
+
+        async function handleFileUpload(input) {
+            if (!input.files || !input.files[0]) return;
+            if (!currentProjectId) {
+                showError("Please select a project first");
+                return;
+            }
+
+            const file = input.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('project_id', currentProjectId);
+
+            document.getElementById('progressContainer').classList.add('active');
+            updateProgress(10, "Uploading video...");
+
+            try {
+                const res = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || "Upload failed");
+
+                const statusId = data.id;
+                const poll = setInterval(async () => {
+                    const sres = await fetch(`/api/status/${statusId}`);
+                    const sdata = await sres.json();
+                    updateProgress(sdata.progress || 0, sdata.status || "processing");
+                    if (sdata.status === 'completed') {
+                        clearInterval(poll);
+                        loadVideos(currentProjectId);
+                        showError("Video uploaded and processed successfully!", false);
+                        setTimeout(() => document.getElementById('progressContainer').classList.remove('active'), 2000);
+                    } else if (sdata.status === 'error') {
+                        clearInterval(poll);
+                        showError(sdata.error || "Processing failed");
+                    }
+                }, 2000);
+            } catch (err) {
+                showError(err.message);
+            }
+        }
+
+        function toggleSplitMenu() {
+            const menu = document.getElementById('splitMenu');
+            menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+
+            // Close menu when clicking outside
+            const closer = (e) => {
+                if (!e.target.closest('#splitMenu') && !e.target.closest('[onclick="toggleSplitMenu()"]')) {
+                    menu.style.display = 'none';
+                    document.removeEventListener('click', closer);
+                }
+            };
+            setTimeout(() => document.addEventListener('click', closer), 10);
+        }
+
+        function showSplitSettings(type) {
+            document.getElementById('splitMenu').style.display = 'none';
+            const settings = document.getElementById('splitSettings');
+            settings.style.display = 'block';
+
+            const aiOpts = document.getElementById('sceneDetectOptions');
+            const fixedOpts = document.getElementById('fixedSplitOptions');
+            const trimOpts = document.getElementById('trimOptions');
+            const title = document.getElementById('splitTypeTitle');
+
+            aiOpts.style.display = 'none';
+            fixedOpts.style.display = 'none';
+            if (trimOpts) trimOpts.style.display = 'none';
+
+            if (type === 'ai') {
+                aiOpts.style.display = 'block';
+                title.innerText = "AI Scene Detection Settings";
+            } else if (type === 'fixed') {
+                fixedOpts.style.display = 'block';
+                title.innerText = "Fixed Interval Splitting";
+            } else if (type === 'trim') {
+                if (trimOpts) trimOpts.style.display = 'block';
+                title.innerText = "Manual Video Cut";
+                const player = document.getElementById('videoPlayer');
+                document.getElementById('trimStart').value = 0;
+                document.getElementById('trimEnd').value = Math.min(10, player.duration || 10).toFixed(1);
+            }
+            settings.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        }
+
+        function setTrimTime(target) {
+            const player = document.getElementById('videoPlayer');
+            const val = player.currentTime.toFixed(1);
+            if (target === 'start') {
+                document.getElementById('trimStart').value = val;
+            } else {
+                document.getElementById('trimEnd').value = val;
+            }
+        }
+
+        async function confirmTrim() {
+            if (!window.__currentVideo) return;
+            const { id: videoId, projectId } = window.__currentVideo;
+            const start = document.getElementById('trimStart').value;
+            const end = document.getElementById('trimEnd').value;
+
+            const title = prompt("Enter a name for this clip (optional):", "Custom Clip");
+            if (title === null) return;
+
+            document.getElementById('splitSettings').style.display = 'none';
+            document.getElementById('progressContainer').classList.add('active');
+            updateProgress(0, "Cutting video...");
+
+            try {
+                const res = await fetch(`/api/projects/${projectId}/videos/${videoId}/trim`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        start_time: parseFloat(start),
+                        end_time: parseFloat(end),
+                        title: title
+                    })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Failed to start cutting');
+
+                const statusId = data.id;
+                const poll = setInterval(async () => {
+                    try {
+                        const sres = await fetch(`/api/status/${encodeURIComponent(statusId)}`);
+                        if (!sres.ok) return;
+                        const sdata = await sres.json();
+
+                        updateProgress(sdata.progress || 0, sdata.status || 'processing');
 
                         if (sdata.status === 'completed') {
                             clearInterval(poll);
                             loadVideos(projectId);
-                            showError('Captions burned successfully! New video added to project.', false);
+                            showError('Manual cut successful!', false);
                             setTimeout(() => {
                                 document.getElementById('progressContainer').classList.remove('active');
                             }, 2000);
                         } else if (sdata.status === 'error') {
                             clearInterval(poll);
-                            showError(sdata.error || 'Burning failed', true);
+                            showError(sdata.error || 'Cutting failed', true);
                         }
                     } catch (err) {
                         console.error(err);
                     }
                 }, 2000);
             } catch (err) {
-                showError(err.message || 'Failed to start burning');
+                showError(err.message || 'Failed to start cutting');
             }
-        }
-
-        function showSplitSettings() {
-            document.getElementById('splitSettings').style.display = 'block';
-            document.getElementById('splitSettings').scrollIntoView({ behavior: 'smooth' });
         }
 
         async function confirmSplit() {
@@ -972,6 +1601,53 @@
             const threshold = document.getElementById('splitThreshold').value;
             document.getElementById('splitSettings').style.display = 'none';
             splitVideoIntoScenes(minLen, threshold);
+        }
+
+        async function confirmFixedSplit() {
+            if (!window.__currentVideo) return;
+            const { id: videoId, projectId } = window.__currentVideo;
+            const interval = document.getElementById('splitInterval').value;
+
+            document.getElementById('splitSettings').style.display = 'none';
+            document.getElementById('progressContainer').classList.add('active');
+            updateProgress(0, "Initiating Split...");
+
+            try {
+                const res = await fetch(`/api/projects/${projectId}/videos/${videoId}/split-fixed`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ interval: parseFloat(interval) })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Failed to start splitting');
+
+                const statusId = data.id;
+                const poll = setInterval(async () => {
+                    try {
+                        const sres = await fetch(`/api/status/${encodeURIComponent(statusId)}`);
+                        if (!sres.ok) return;
+                        const sdata = await sres.json();
+
+                        updateProgress(sdata.progress || 0, sdata.status || 'processing');
+
+                        if (sdata.status === 'completed') {
+                            clearInterval(poll);
+                            loadVideos(projectId);
+                            showError(`Successfully split into ${sdata.clips_count} clips!`, false);
+                            setTimeout(() => {
+                                document.getElementById('progressContainer').classList.remove('active');
+                            }, 2000);
+                        } else if (sdata.status === 'error') {
+                            clearInterval(poll);
+                            showError(sdata.error || 'Splitting failed', true);
+                        }
+                    } catch (err) {
+                        console.error(err);
+                    }
+                }, 2000);
+            } catch (err) {
+                showError(err.message || 'Failed to start splitting');
+            }
         }
 
         async function splitVideoIntoScenes(minSceneLen = 2.0, threshold = 3.0) {
@@ -1034,21 +1710,24 @@
             const container = document.getElementById('reelContainer');
             overlay.classList.add('active');
 
-            // Get all videos in project
-            const videoItems = document.querySelectorAll('#videoList li');
+            // Get all videos currently in the list
+            const videoItems = Array.from(document.querySelectorAll('#videoList li[data-id]'));
             if (videoItems.length === 0) {
                 container.innerHTML = '<div style="color:white;text-align:center;padding:100px;">No videos found in this project.</div>';
                 return;
             }
 
+            // By default, prioritize clips if any exist, otherwise show all
+            const clips = videoItems.filter(item => item.dataset.isClip === 'true');
+            const itemsToDistplay = clips.length > 0 ? clips : videoItems;
+
             container.innerHTML = '';
 
-            videoItems.forEach((item, index) => {
+            itemsToDistplay.forEach((item, index) => {
                 const title = item.dataset.title;
                 const filename = item.dataset.filename;
                 const videoId = item.dataset.id;
-
-                if (!filename) return;
+                const isClip = item.dataset.isClip === 'true';
 
                 const reel = document.createElement('div');
                 reel.className = 'reel-item';
@@ -1056,98 +1735,103 @@
                     <video class="reel-video" loop playsinline muted>
                         <source src="/api/video/${currentProjectId}/${encodeURIComponent(filename)}" type="video/mp4">
                     </video>
-                    <div class="reel-info" style="bottom: 100px;">
-                        <h2 style="font-size: 24px;">${title}</h2>
-                        <p style="opacity: 0.7;">${filename}</p>
+                    
+                    <div class="reel-info" style="bottom: 120px; transition: all 0.3s ease;">
+                        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                            ${isClip ? '<span style="background:#667eea; color:white; padding:2px 8px; border-radius:4px; font-size:10px; font-weight:bold;">CLIP</span>' : ''}
+                            <span style="opacity:0.8; font-size:12px;">@${currentProjectId.substring(0, 8)}</span>
+                        </div>
+                        <h2 style="font-size: 20px; margin-bottom:10px; line-height:1.2;">${title}</h2>
+                        <p style="opacity: 0.7; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${filename}</p>
                     </div>
+
                     <div class="reel-controls">
-                        <button class="reel-btn" onclick="deleteVideo('${currentProjectId}', '${videoId}')">🗑️</button>
-                        <button class="reel-btn" onclick="window.open('/api/video/${currentProjectId}/${encodeURIComponent(filename)}', '_blank')">⬇️</button>
+                        <button class="reel-btn" onclick="deleteVideo('${currentProjectId}', '${videoId}'); this.closest('.reel-item').remove();" title="Delete">🗑️</button>
+                        <button class="reel-btn" onclick="window.open('/api/video/${currentProjectId}/${encodeURIComponent(filename)}', '_blank')" title="Download">⬇️</button>
+                        <div style="text-align:center; color:white; font-size:12px; margin-top:10px;">
+                            ${index + 1}/${itemsToDistplay.length}
+                        </div>
+                    </div>
+
+                    <div style="position:absolute; bottom:20px; left:50%; transform:translateX(-50%); color:rgba(255,255,255,0.5); font-size:12px; animation:bounce 2s infinite;">
+                        ↑ Scroll for more
                     </div>
                 `;
+
+                // Tap to play/pause logic
+                const video = reel.querySelector('video');
+                reel.onclick = (e) => {
+                    if (e.target.closest('.reel-controls') || e.target.closest('.reel-header')) return;
+                    if (video.paused) video.play();
+                    else video.pause();
+                };
+
                 container.appendChild(reel);
             });
 
-            // Auto-play observer
+            // Auto-play observer with intelligent play/pause
             if (reelObserver) reelObserver.disconnect();
             reelObserver = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
                     const video = entry.target.querySelector('video');
                     if (entry.isIntersecting) {
-                        video.play();
+                        video.play().catch(e => console.warn('Autoplay blocked'));
+                        const title = entry.target.querySelector('h2').textContent;
+                        document.getElementById('reelProjectName').textContent = title;
                     } else {
                         video.pause();
                         video.currentTime = 0;
                     }
                 });
-            }, { threshold: 0.8 });
+            }, {
+                threshold: 0.6,
+                root: container
+            });
 
             document.querySelectorAll('.reel-item').forEach(item => reelObserver.observe(item));
         }
 
         function closeReelFeed() {
             document.getElementById('reelOverlay').classList.remove('active');
-            document.querySelectorAll('.reel-video').forEach(v => v.pause());
+            document.querySelectorAll('.reel-video').forEach(v => {
+                v.pause();
+                v.currentTime = 0;
+            });
             if (reelObserver) reelObserver.disconnect();
         }
 
         async function checkStatus(fileId) {
             try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-                const response = await fetch(`/api/status/${fileId}`, {
-                    signal: controller.signal
-                });
-                clearTimeout(timeoutId);
-
-                if (!response.ok) {
-                    if (response.status === 404) {
-                        statusCheckFailures++;
-                        if (statusCheckFailures >= MAX_STATUS_FAILURES) {
-                            showError('Processing not found. Please try again.', true);
-                            if (statusCheckInterval) {
-                                clearInterval(statusCheckInterval);
-                                statusCheckInterval = null;
-                            }
-                            resetUI();
-                        }
-                        return;
-                    }
-                    throw new Error(`HTTP ${response.status}`);
-                }
+                const response = await fetch(`/api/status/${fileId}`);
+                if (!response.ok) return;
 
                 const data = await response.json();
                 statusCheckFailures = 0;
 
-                if (data.status === 'completed' && data.file) {
+                if (data.status === 'completed') {
                     updateProgress(100, 'completed');
                     setTimeout(() => {
-                        showVideo(data.file, data.project_id || currentProjectId);
-                        if (currentProjectId) loadVideos(currentProjectId);
+                        if (data.file) {
+                            showVideo(data.file, data.project_id || currentProjectId);
+                            if (currentProjectId) loadVideos(currentProjectId);
+                        }
                     }, 500);
+                    if (statusCheckInterval) {
+                        clearInterval(statusCheckInterval);
+                        statusCheckInterval = null;
+                    }
                 } else if (data.status === 'error') {
-                    const errorMsg = data.error || 'An error occurred during processing';
-                    const isRetryable = !errorMsg.includes('FFmpeg is not installed') &&
-                        !errorMsg.includes('Invalid URL');
-                    showError(errorMsg, isRetryable);
+                    showError(data.error || 'Processing failed');
                     if (statusCheckInterval) {
                         clearInterval(statusCheckInterval);
                         statusCheckInterval = null;
                     }
                     resetUI();
-                } else if (data.status === 'not_found') {
-                    statusCheckFailures++;
-                    if (statusCheckFailures >= MAX_STATUS_FAILURES) {
-                        showError('Processing not found. Please try again.', true);
-                        if (statusCheckInterval) {
-                            clearInterval(statusCheckInterval);
-                            statusCheckInterval = null;
-                        }
-                        resetUI();
-                    }
                 } else {
                     updateProgress(data.progress || 0, data.status || 'processing');
+                    if (data.details) {
+                        document.getElementById('statusText').textContent = data.details;
+                    }
                 }
             } catch (error) {
                 console.error('Status check error:', error);

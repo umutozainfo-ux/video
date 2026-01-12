@@ -957,41 +957,122 @@ def generate_caption(project_id, filename):
         return jsonify({'error': 'Failed to start captioning'}), 500
 
 
+@app.route('/api/upload', methods=['POST'])
+def upload_file():
+    """Directly upload a video file to a project."""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file part'}), 400
+        file = request.files['file']
+        project_id = request.form.get('project_id')
+        
+        if not project_id:
+            return jsonify({'error': 'project_id is required'}), 400
+        if file.filename == '':
+            return jsonify({'error': 'No selected file'}), 400
+            
+        project_id = secure_filename(project_id)
+        projects_data = get_projects()
+        if project_id not in projects_data:
+            return jsonify({'error': 'Project not found'}), 404
+
+        file_id = str(uuid.uuid4())
+        safe_name = sanitize_filename(os.path.splitext(file.filename)[0])
+        _, processed_dir, _ = ensure_project_dirs(project_id)
+        
+        temp_path = os.path.join(tempfile.gettempdir(), f"upload_{file_id}_{file.filename}")
+        file.save(temp_path)
+        
+        output_filename = f"{safe_name}.mp4"
+        output_path = os.path.join(processed_dir, output_filename)
+        
+        # Ensure unique
+        suffix = 1
+        while os.path.exists(output_path):
+            output_filename = f"{safe_name}_{suffix}.mp4"
+            output_path = os.path.join(processed_dir, output_filename)
+            suffix += 1
+
+        status_key = file_id
+        thread_safe_status_update(status_key, {'status': 'processing', 'progress': 10, 'project_id': project_id})
+
+        def process_upload():
+            try:
+                # Still run through TikTok conversion to ensure format consistency
+                if convert_to_tiktok_aspect(temp_path, output_path, status_key):
+                    def mutator(d):
+                        p = d.get(project_id)
+                        if not p: return d
+                        p.setdefault('videos', []).append({
+                            'id': file_id,
+                            'title': safe_name.replace('_', ' '),
+                            'filename': output_filename,
+                            'project_id': project_id,
+                            'created_at': datetime.now(timezone.utc).isoformat(),
+                            'source_url': 'Uploaded Local File'
+                        })
+                        return d
+                    update_projects(mutator)
+                    thread_safe_status_update(status_key, {'status': 'completed', 'progress': 100, 'file': output_filename})
+                else:
+                    thread_safe_status_update(status_key, {'status': 'error', 'error': 'Processing failed'})
+            except Exception as e:
+                thread_safe_status_update(status_key, {'status': 'error', 'error': str(e)})
+            finally:
+                if os.path.exists(temp_path): os.remove(temp_path)
+
+        threading.Thread(target=process_upload, daemon=True).start()
+        return jsonify({'id': file_id, 'status': 'processing'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/projects/<project_id>/videos/<video_id>/burn', methods=['POST'])
 def burn_caption(project_id, video_id):
-    """Hardcode (burn) captions into the video."""
+    """Hardcode (burn) captions into the video with professional styling."""
     try:
         project_id = secure_filename(project_id)
         data = request.get_json(force=True, silent=True) or {}
         caption_filename = data.get('caption_file')
+        style = data.get('style', {}) # New: Custom styling
         
         if not caption_filename:
             return jsonify({'error': 'caption_file is required'}), 400
         
         caption_filename = secure_filename(caption_filename)
-        
-        # Load project
         projects_data = get_projects()
         project = projects_data.get(project_id)
-        if not project:
-            return jsonify({'error': 'Project not found'}), 404
-            
         video = find_video(project, video_id)
-        if not video:
-            return jsonify({'error': 'Video not found'}), 404
+        
+        if not video: return jsonify({'error': 'Video not found'}), 404
             
         input_filename = video['filename']
         input_path = os.path.join(app.config['PROCESSED_FOLDER'], project_id, input_filename)
         caption_path = os.path.join(app.config['CAPTIONS_FOLDER'], project_id, caption_filename)
         
-        if not os.path.exists(input_path):
-            return jsonify({'error': 'Video file not found'}), 404
-        if not os.path.exists(caption_path):
-            return jsonify({'error': 'Caption file not found'}), 404
-            
-        base_name = os.path.splitext(input_filename)[0]
-        output_filename = f"{base_name}_burned.mp4"
+        output_filename = f"{os.path.splitext(input_filename)[0]}_burned_{str(uuid.uuid4())[:4]}.mp4"
         output_path = os.path.join(app.config['PROCESSED_FOLDER'], project_id, output_filename)
+        
+        # Style Conversion (Hex #RRGGBB to ASS &HBBGGRR&)
+        def hex_to_ass(hex_color):
+            if not hex_color or not hex_color.startswith('#'): return '&HFFFFFF&'
+            r, g, b = hex_color[1:3], hex_color[3:5], hex_color[5:7]
+            return f"&H00{b}{g}{r}&"
+
+        font_size = style.get('fontSize', 18)
+        primary_color = hex_to_ass(style.get('primaryColor', '#ffffff'))
+        outline_color = hex_to_ass(style.get('outlineColor', '#000000'))
+        alignment = style.get('alignment', 2) # 2 = Bottom Center
+        font_name = style.get('fontName', 'Arial Black')
+        outline_width = style.get('outlineWidth', 2)
+        
+        # Build ASS force_style string
+        # Alignment: 2=bottom-center, 5=top-center, 10=middle-center
+        force_style = (
+            f"Fontname={font_name},Fontsize={font_size},PrimaryColour={primary_color},"
+            f"OutlineColour={outline_color},Outline={outline_width},Shadow=1,Alignment={alignment},"
+            f"MarginV=40,Bold=-1"
+        )
         
         status_key = f"burn_{project_id}_{video_id}"
         thread_safe_status_update(status_key, {'status': 'starting', 'progress': 0, 'project_id': project_id})
@@ -999,55 +1080,42 @@ def burn_caption(project_id, video_id):
         def worker():
             try:
                 thread_safe_status_update(status_key, {'status': 'burning', 'progress': 10})
-                
-                # Windows path escaping for FFmpeg subtitles filter
                 abs_caption_path = os.path.abspath(caption_path).replace('\\', '/').replace(':', '\\:')
                 
                 ffmpeg_cmd = [
                     'ffmpeg', '-i', input_path,
-                    '-vf', f"subtitles='{abs_caption_path}'",
-                    '-c:a', 'copy',
-                    '-y',
-                    output_path
+                    '-vf', f"subtitles='{abs_caption_path}':force_style='{force_style}'",
+                    '-c:a', 'copy', '-y', output_path
                 ]
                 
-                logger.info(f"Running burn command: {' '.join(ffmpeg_cmd)}")
-                
+                logger.info(f"Viral Burn: {' '.join(ffmpeg_cmd)}")
                 result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
-                if result.returncode != 0:
-                    raise Exception(f"FFmpeg failed: {result.stderr}")
+                if result.returncode != 0: raise Exception(f"FFmpeg failed: {result.stderr}")
                 
                 def mutator(d):
                     p = d.get(project_id)
                     if not p: return d
                     v_list = p.setdefault('videos', [])
-                    if not any(v['filename'] == output_filename for v in v_list):
-                        v_list.append({
-                            'id': str(uuid.uuid4()),
-                            'title': f"{video.get('title', 'Video')} (Burned)",
-                            'source_url': video.get('source_url'),
-                            'filename': output_filename,
-                            'project_id': project_id,
-                            'created_at': datetime.now(timezone.utc).isoformat()
-                        })
+                    v_list.append({
+                        'id': str(uuid.uuid4()),
+                        'title': f"{video.get('title', 'Video')} (Viral Styled)",
+                        'filename': output_filename,
+                        'project_id': project_id,
+                        'created_at': datetime.now(timezone.utc).isoformat(),
+                        'is_clip': True
+                    })
                     return d
-                
                 update_projects(mutator)
-                
-                thread_safe_status_update(status_key, {
-                    'status': 'completed',
-                    'progress': 100,
-                    'file': output_filename,
-                    'project_id': project_id
-                })
+                thread_safe_status_update(status_key, {'status': 'completed', 'progress': 100, 'file': output_filename})
             except Exception as e:
                 logger.error(f"Burn failed: {str(e)}")
                 thread_safe_status_update(status_key, {'status': 'error', 'error': str(e)})
                 
-        t = threading.Thread(target=worker, daemon=True)
-        t.start()
-        
+        threading.Thread(target=worker, daemon=True).start()
         return jsonify({'status': 'processing', 'id': status_key})
+    except Exception as e:
+        logger.error(f"Burn caption error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
     except Exception as e:
         logger.error(f"Burn caption error: {str(e)}")
         return jsonify({'error': str(e)}), 500
@@ -1091,20 +1159,17 @@ def split_scenes(project_id, video_id):
             try:
                 thread_safe_status_update(status_key, {'status': 'detecting_scenes', 'progress': 5, 'details': 'Analyzing video content...'})
                 
-                # Use scenedetect to find scenes with AdaptiveDetector
+                # Use scenedetect to find scenes
                 video = open_video(input_path)
                 scene_manager = SceneManager()
+                
+                # Try AdaptiveDetector first
+                logger.info(f"Attempting scene detection with AdaptiveDetector (threshold={threshold})")
                 scene_manager.add_detector(AdaptiveDetector(adaptive_threshold=threshold))
                 
                 def progress_callback(frame_img, frame_num):
                     try:
-                        # Fallback to estimation if duration is weird
-                        total_frames = 0
-                        try:
-                            total_frames = video.duration.get_frames()
-                        except:
-                            pass
-                            
+                        total_frames = video.duration.get_frames()
                         if total_frames > 0:
                             prog = 5 + (frame_num / total_frames) * 40
                             thread_safe_status_update(status_key, {'progress': int(prog)})
@@ -1114,72 +1179,131 @@ def split_scenes(project_id, video_id):
                 scene_manager.detect_scenes(video, callback=progress_callback)
                 detected_scenes = scene_manager.get_scene_list()
                 
+                # Fallback if no scenes detected
+                if not detected_scenes or len(detected_scenes) <= 1:
+                    logger.info("AdaptiveDetector found too few scenes, falling back to ContentDetector")
+                    scene_manager = SceneManager()
+                    scene_manager.add_detector(ContentDetector(threshold=27.0)) # Standard threshold
+                    scene_manager.detect_scenes(video, callback=progress_callback)
+                    detected_scenes = scene_manager.get_scene_list()
+                
                 # Filter scenes by minimum length
                 scene_list = [s for s in detected_scenes if (s[1].get_seconds() - s[0].get_seconds()) >= min_scene_len]
                 
+                # If STILL no scenes (and the video is long enough), just split it into 3 equal parts as a last resort
                 if not scene_list:
-                    thread_safe_status_update(status_key, {
-                        'status': 'error', 
-                        'error': f'No scenes detected with length >= {min_scene_len}s. Try lowering sensitivity or length.'
-                    })
-                    return
+                    duration = video.duration.get_seconds()
+                    if duration > min_scene_len * 2:
+                        logger.info("No scenes detected, falling back to manual split")
+                        part = duration / 3
+                        # Create dummy scene objects (tuples of FrameTimecode)
+                        # We need to import FrameTimecode if we want to be official, or just use seconds if ffmpeg supports it
+                        # The scenedetect scene list is [(start, end), ...]
+                        # Actually, let's just use manual split logic below if scene_list is empty
+                        pass
+                
+                if not scene_list:
+                    # Final manual fallback for "always work"
+                    duration = video.duration.get_seconds()
+                    num_clips = max(1, int(duration // max(min_scene_len, 5)))
+                    if num_clips > 1:
+                        logger.info(f"Detector failed. Manually splitting into {num_clips} parts.")
+                        clip_dur = duration / num_clips
+                        for i in range(num_clips):
+                            # We can't easily create scenedetect objects here without more imports
+                            # So let's just manually process them in the extraction loop
+                            pass
 
                 thread_safe_status_update(status_key, {
                     'status': 'splitting_clips', 
                     'progress': 50, 
-                    'details': f'Extracting {len(scene_list)} clips...'
+                    'details': f'Extracting {len(scene_list) or "several"} clips...'
                 })
                 
                 base_name = os.path.splitext(input_filename)[0]
                 video_title = video_obj.get('title', 'Video')
                 video_source = video_obj.get('source_url', '')
                 
-                total_scenes = len(scene_list)
                 new_videos = []
                 
-                for i, scene in enumerate(scene_list):
-                    start_time = scene[0].get_seconds()
-                    end_time = scene[1].get_seconds()
-                    duration = end_time - start_time
-                    
-                    clip_filename = f"{base_name}_clip_{i+1}.mp4"
-                    clip_path = os.path.join(processed_dir, clip_filename)
-                    
-                    # Ensure unique filename
-                    suffix = 1
-                    while os.path.exists(clip_path):
-                        clip_filename = f"{base_name}_clip_{i+1}_{suffix}.mp4"
-                        clip_path = os.path.join(processed_dir, clip_filename)
-                        suffix += 1
-
-                    # FFmpeg to extract clip - optimized
-                    ffmpeg_cmd = [
-                        'ffmpeg', '-ss', f"{start_time:.3f}", '-t', f"{duration:.3f}",
-                        '-i', input_path,
-                        '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '24',
-                        '-c:a', 'aac', '-b:a', '128k',
-                        '-y', clip_path
-                    ]
-                    
-                    result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
-                    if result.returncode != 0:
-                        logger.error(f"Clip {i+1} failed: {result.stderr}")
-                        continue
+                # If we have a scene list, process it
+                if scene_list:
+                    total_scenes = len(scene_list)
+                    for i, scene in enumerate(scene_list):
+                        start_time = scene[0].get_seconds()
+                        end_time = scene[1].get_seconds()
+                        duration = end_time - start_time
                         
-                    new_videos.append({
-                        'id': str(uuid.uuid4()),
-                        'title': f"{video_title} Clip {i+1}",
-                        'source_url': video_source,
-                        'filename': clip_filename,
-                        'project_id': project_id,
-                        'created_at': datetime.now(timezone.utc).isoformat()
-                    })
-                    
-                    # Progress 50% to 100%
-                    prog = 50 + ((i + 1) / total_scenes) * 50
-                    thread_safe_status_update(status_key, {'progress': int(prog), 'details': f'Processed {i+1}/{total_scenes} clips'})
+                        clip_filename = f"{base_name}_clip_{i+1}.mp4"
+                        clip_path = os.path.join(processed_dir, clip_filename)
+                        
+                        # Ensure unique filename
+                        suffix = 1
+                        while os.path.exists(clip_path):
+                            clip_filename = f"{base_name}_clip_{i+1}_{suffix}.mp4"
+                            clip_path = os.path.join(processed_dir, clip_filename)
+                            suffix += 1
 
-                # Update project metadata once
+                        # FFmpeg to extract clip - high quality but fast
+                        ffmpeg_cmd = [
+                            'ffmpeg', '-ss', f"{start_time:.3f}", '-t', f"{duration:.3f}",
+                            '-i', input_path,
+                            '-c:v', 'libx264', '-preset', 'fast', '-crf', '22',
+                            '-c:a', 'aac', '-b:a', '128k',
+                            '-movflags', '+faststart',
+                            '-y', clip_path
+                        ]
+                        
+                        result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
+                        if result.returncode != 0:
+                            logger.error(f"Clip {i+1} failed: {result.stderr}")
+                            continue
+                            
+                        new_videos.append({
+                            'id': str(uuid.uuid4()),
+                            'title': f"{video_title} Clip {i+1}",
+                            'source_url': video_source,
+                            'filename': clip_filename,
+                            'project_id': project_id,
+                            'created_at': datetime.now(timezone.utc).isoformat(),
+                            'is_clip': True
+                        })
+                        
+                        prog = 50 + ((i + 1) / total_scenes) * 50
+                        thread_safe_status_update(status_key, {'progress': int(prog), 'details': f'Processed {i+1}/{total_scenes} clips'})
+                else:
+                    # Manual basic split if detection failed completely
+                    duration = video.duration.get_seconds()
+                    num_parts = 3
+                    thread_safe_status_update(status_key, {'details': f'Detection failed, doing basic {num_parts}-way split...'})
+                    for i in range(num_parts):
+                        start_time = (duration / num_parts) * i
+                        part_dur = duration / num_parts
+                        
+                        clip_filename = f"{base_name}_part_{i+1}.mp4"
+                        clip_path = os.path.join(processed_dir, clip_filename)
+                        
+                        ffmpeg_cmd = [
+                            'ffmpeg', '-ss', f"{start_time:.3f}", '-t', f"{part_dur:.3f}",
+                            '-i', input_path,
+                            '-c:v', 'libx264', '-preset', 'fast', '-crf', '22',
+                            '-c:a', 'aac', '-b:a', '128k',
+                            '-movflags', '+faststart',
+                            '-y', clip_path
+                        ]
+                        subprocess.run(ffmpeg_cmd, capture_output=True)
+                        
+                        new_videos.append({
+                            'id': str(uuid.uuid4()),
+                            'title': f"{video_title} Part {i+1}",
+                            'source_url': video_source,
+                            'filename': clip_filename,
+                            'project_id': project_id,
+                            'created_at': datetime.now(timezone.utc).isoformat(),
+                            'is_clip': True
+                        })
+                        thread_safe_status_update(status_key, {'progress': 50 + int(((i+1)/num_parts)*50)})
+
                 if new_videos:
                     def mutator(d):
                         p = d.get(project_id)
@@ -1206,6 +1330,249 @@ def split_scenes(project_id, video_id):
         return jsonify({'status': 'processing', 'id': status_key})
     except Exception as e:
         logger.error(f"Split scenes error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/projects/<project_id>/videos/<video_id>/split-fixed', methods=['POST'])
+def split_fixed(project_id, video_id):
+    """Split video into fixed intervals (e.g., every 30s) without scene detection."""
+    try:
+        project_id = secure_filename(project_id)
+        data = request.get_json(force=True, silent=True) or {}
+        interval = float(data.get('interval', 30.0))
+        
+        if interval <= 0:
+            return jsonify({'error': 'Interval must be greater than 0'}), 400
+
+        # Load project
+        projects_data = get_projects()
+        project = projects_data.get(project_id)
+        if not project:
+            return jsonify({'error': 'Project not found'}), 404
+            
+        video_obj = find_video(project, video_id)
+        if not video_obj:
+            return jsonify({'error': 'Video not found'}), 404
+            
+        input_filename = video_obj['filename']
+        input_path = os.path.join(app.config['PROCESSED_FOLDER'], project_id, input_filename)
+        processed_dir = os.path.join(app.config['PROCESSED_FOLDER'], project_id)
+        
+        if not os.path.exists(input_path):
+            return jsonify({'error': f"Video file not found at {input_path}"}), 404
+            
+        status_key = f"split_fixed_{project_id}_{video_id}"
+        thread_safe_status_update(status_key, {
+            'status': 'starting', 
+            'progress': 0, 
+            'project_id': project_id,
+            'details': f'Preparing to split every {interval}s'
+        })
+        
+        def worker():
+            try:
+                # 1. Get total duration using ffprobe
+                probe_cmd = [
+                    'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+                    '-of', 'default=noprint_wrappers=1:nokey=1', input_path
+                ]
+                result = subprocess.run(probe_cmd, capture_output=True, text=True, check=True)
+                total_duration = float(result.stdout.strip())
+                
+                num_clips = int(total_duration // interval)
+                if total_duration % interval > 0.5: # Include tail if it's significant
+                    num_clips += 1
+                
+                if num_clips <= 1:
+                    thread_safe_status_update(status_key, {
+                        'status': 'error', 
+                        'error': f'Video is shorter than the interval ({total_duration:.1f}s < {interval}s)'
+                    })
+                    return
+
+                thread_safe_status_update(status_key, {
+                    'status': 'splitting_clips', 
+                    'progress': 10, 
+                    'details': f'Creating {num_clips} segments...'
+                })
+                
+                base_name = os.path.splitext(input_filename)[0]
+                video_title = video_obj.get('title', 'Video')
+                video_source = video_obj.get('source_url', '')
+                new_videos = []
+                
+                for i in range(num_clips):
+                    start_time = i * interval
+                    if start_time >= total_duration:
+                        break
+                        
+                    # Calculate actual duration for this segment
+                    seg_dur = min(interval, total_duration - start_time)
+                    if seg_dur < 1.0 and i > 0: # Skip tiny tails
+                        break
+                        
+                    clip_filename = f"{base_name}_part_{i+1}.mp4"
+                    clip_path = os.path.join(processed_dir, clip_filename)
+                    
+                    # Ensure unique filename
+                    suffix = 1
+                    while os.path.exists(clip_path):
+                        clip_filename = f"{base_name}_part_{i+1}_{suffix}.mp4"
+                        clip_path = os.path.join(processed_dir, clip_filename)
+                        suffix += 1
+
+                    # FFmpeg to extract clip - fast and high quality
+                    ffmpeg_cmd = [
+                        'ffmpeg', '-ss', f"{start_time:.3f}", '-t', f"{seg_dur:.3f}",
+                        '-i', input_path,
+                        '-c:v', 'libx264', '-preset', 'fast', '-crf', '22',
+                        '-c:a', 'aac', '-b:a', '128k',
+                        '-movflags', '+faststart',
+                        '-y', clip_path
+                    ]
+                    
+                    subprocess.run(ffmpeg_cmd, capture_output=True)
+                    
+                    new_videos.append({
+                        'id': str(uuid.uuid4()),
+                        'title': f"{video_title} Part {i+1}",
+                        'source_url': video_source,
+                        'filename': clip_filename,
+                        'project_id': project_id,
+                        'created_at': datetime.now(timezone.utc).isoformat(),
+                        'is_clip': True
+                    })
+                    
+                    prog = 10 + ((i + 1) / num_clips) * 90
+                    thread_safe_status_update(status_key, {'progress': int(prog), 'details': f'Extracted {i+1}/{num_clips} clips'})
+
+                if new_videos:
+                    def mutator(d):
+                        p = d.get(project_id)
+                        if not p: return d
+                        v_list = p.setdefault('videos', [])
+                        v_list.extend(new_videos)
+                        return d
+                    update_projects(mutator)
+
+                thread_safe_status_update(status_key, {
+                    'status': 'completed',
+                    'progress': 100,
+                    'project_id': project_id,
+                    'clips_count': len(new_videos)
+                })
+                logger.info(f"Fixed interval split completed: {len(new_videos)} clips created")
+            except Exception as e:
+                logger.error(f"Fixed split failed: {str(e)}", exc_info=True)
+                thread_safe_status_update(status_key, {'status': 'error', 'error': str(e)})
+                
+        t = threading.Thread(target=worker, daemon=True)
+        t.start()
+        
+        return jsonify({'status': 'processing', 'id': status_key})
+    except Exception as e:
+        logger.error(f"Split fixed error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/projects/<project_id>/videos/<video_id>/trim', methods=['POST'])
+def trim_video(project_id, video_id):
+    """Manually trim a specific segment of a video."""
+    try:
+        project_id = secure_filename(project_id)
+        data = request.get_json(force=True, silent=True) or {}
+        start_time = float(data.get('start_time', 0))
+        end_time = float(data.get('end_time', 0))
+        custom_title = data.get('title', '').strip()
+        
+        if end_time <= start_time:
+            return jsonify({'error': 'End time must be greater than start time'}), 400
+
+        # Load project
+        projects_data = get_projects()
+        project = projects_data.get(project_id)
+        if not project:
+            return jsonify({'error': 'Project not found'}), 404
+            
+        video_obj = find_video(project, video_id)
+        if not video_obj:
+            return jsonify({'error': 'Video not found'}), 404
+            
+        input_filename = video_obj['filename']
+        input_path = os.path.join(app.config['PROCESSED_FOLDER'], project_id, input_filename)
+        processed_dir = os.path.join(app.config['PROCESSED_FOLDER'], project_id)
+        
+        if not os.path.exists(input_path):
+            return jsonify({'error': f"Video file not found at {input_path}"}), 404
+            
+        status_key = f"trim_{project_id}_{video_id}_{uuid.uuid4().hex[:8]}"
+        thread_safe_status_update(status_key, {
+            'status': 'starting', 
+            'progress': 0, 
+            'project_id': project_id,
+            'details': f'Trimming segment {start_time:.1f}s - {end_time:.1f}s'
+        })
+        
+        def worker():
+            try:
+                duration = end_time - start_time
+                base_name = os.path.splitext(input_filename)[0]
+                video_title = video_obj.get('title', 'Video')
+                video_source = video_obj.get('source_url', '')
+                
+                clip_id = str(uuid.uuid4())
+                clip_filename = f"{base_name}_trim_{clip_id[:8]}.mp4"
+                clip_path = os.path.join(processed_dir, clip_filename)
+                
+                thread_safe_status_update(status_key, {'status': 'processing', 'progress': 30, 'details': 'Extracting clip...'})
+
+                # FFmpeg to extract clip
+                ffmpeg_cmd = [
+                    'ffmpeg', '-ss', f"{start_time:.3f}", '-t', f"{duration:.3f}",
+                    '-i', input_path,
+                    '-c:v', 'libx264', '-preset', 'fast', '-crf', '22',
+                    '-c:a', 'aac', '-b:a', '128k',
+                    '-movflags', '+faststart',
+                    '-y', clip_path
+                ]
+                
+                result = subprocess.run(ffmpeg_cmd, capture_output=True)
+                if result.returncode != 0:
+                    raise Exception(result.stderr.decode() if result.stderr else "FFmpeg cut failed")
+
+                new_video = {
+                    'id': clip_id,
+                    'title': custom_title or f"{video_title} Trimmed",
+                    'source_url': video_source,
+                    'filename': clip_filename,
+                    'project_id': project_id,
+                    'created_at': datetime.now(timezone.utc).isoformat(),
+                    'is_clip': True
+                }
+                
+                def mutator(d):
+                    p = d.get(project_id)
+                    if not p: return d
+                    v_list = p.setdefault('videos', [])
+                    v_list.append(new_video)
+                    return d
+                update_projects(mutator)
+
+                thread_safe_status_update(status_key, {
+                    'status': 'completed',
+                    'progress': 100,
+                    'project_id': project_id
+                })
+            except Exception as e:
+                logger.error(f"Trim failed: {str(e)}", exc_info=True)
+                thread_safe_status_update(status_key, {'status': 'error', 'error': str(e)})
+                
+        t = threading.Thread(target=worker, daemon=True)
+        t.start()
+        
+        return jsonify({'status': 'processing', 'id': status_key})
+    except Exception as e:
+        logger.error(f"Trim video error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 
