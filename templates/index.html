@@ -1,0 +1,1252 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Downloader & Converter</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 800px;
+            width: 100%;
+            padding: 40px;
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .input-group {
+            margin-bottom: 30px;
+        }
+
+        .url-input {
+            width: 100%;
+            padding: 15px 20px;
+            font-size: 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            transition: all 0.3s ease;
+            outline: none;
+        }
+
+        .url-input:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 15px;
+            font-size: 18px;
+            font-weight: 600;
+            color: white;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .progress-container {
+            display: none;
+            margin-top: 30px;
+        }
+
+        .progress-container.active {
+            display: block;
+            animation: slideDown 0.3s ease;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: #f0f0f0;
+            border-radius: 15px;
+            overflow: hidden;
+            margin-bottom: 15px;
+            position: relative;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+            border-radius: 15px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .progress-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            right: 0;
+            background: linear-gradient(90deg,
+                    transparent,
+                    rgba(255, 255, 255, 0.3),
+                    transparent);
+            animation: shimmer 2s infinite;
+        }
+
+        @keyframes shimmer {
+            0% {
+                transform: translateX(-100%);
+            }
+
+            100% {
+                transform: translateX(100%);
+            }
+        }
+
+        .status-text {
+            text-align: center;
+            color: #666;
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+
+        .video-container {
+            display: none;
+            margin-top: 30px;
+            text-align: center;
+        }
+
+        .video-container.active {
+            display: block;
+            animation: fadeIn 0.5s ease;
+        }
+
+        video {
+            width: 100%;
+            max-width: 400px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            margin-bottom: 20px;
+        }
+
+        .download-btn {
+            display: inline-block;
+            padding: 12px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+        }
+
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .error-message {
+            display: none;
+            padding: 15px;
+            background: #fee;
+            color: #c33;
+            border-radius: 8px;
+            margin-top: 20px;
+            border-left: 4px solid #c33;
+        }
+
+        .error-message.active {
+            display: block;
+            animation: shake 0.5s ease;
+        }
+
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            25% {
+                transform: translateX(-10px);
+            }
+
+            75% {
+                transform: translateX(10px);
+            }
+        }
+
+        .platform-badges {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            padding: 5px 15px;
+            background: #f0f0f0;
+            border-radius: 20px;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Reel Feed Styles */
+        .reel-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #000;
+            z-index: 1000;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .reel-overlay.active {
+            display: flex;
+        }
+
+        .reel-header {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 1010;
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .reel-close {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            backdrop-filter: blur(5px);
+        }
+
+        .reel-container {
+            flex: 1;
+            scroll-snap-type: y mandatory;
+            overflow-y: scroll;
+            height: 100%;
+        }
+
+        .reel-item {
+            height: 100vh;
+            width: 100%;
+            scroll-snap-align: start;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            background: #000;
+        }
+
+        .reel-video {
+            height: 100%;
+            max-width: 100%;
+            object-fit: contain;
+        }
+
+        .reel-info {
+            position: absolute;
+            bottom: 40px;
+            left: 20px;
+            color: white;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+            max-width: 80%;
+        }
+
+        .reel-controls {
+            position: absolute;
+            right: 20px;
+            bottom: 100px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .reel-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+
+        .reel-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.1);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🎬 Video Workspace</h1>
+        <p class="subtitle">Projects, downloads, captions</p>
+
+        <div class="platform-badges">
+            <span class="badge">YouTube</span>
+            <span class="badge">TikTok</span>
+            <span class="badge">Instagram</span>
+            <span class="badge">Direct URLs</span>
+        </div>
+
+        <div class="input-group" style="margin-bottom:20px;">
+            <label style="display:block;margin-bottom:8px;color:#555;font-weight:600;">Project</label>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+                <select id="projectSelect" class="url-input" style="flex:1;min-width:200px;"
+                    onchange="handleProjectChange()">
+                </select>
+                <input type="text" id="newProjectName" class="url-input" placeholder="New project name"
+                    style="flex:1;min-width:180px;">
+                <button class="btn" style="flex:0 0 auto;padding:12px 16px;font-size:14px;"
+                    onclick="createProject()">Create</button>
+                <button class="btn"
+                    style="flex:0 0 auto;padding:12px 16px;font-size:14px;background:linear-gradient(135deg,#4ade80,#22c55e);"
+                    onclick="refreshProjects()">Refresh</button>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;">
+                <input type="text" id="urlInput" class="url-input"
+                    placeholder="Paste video URL here (YouTube, TikTok, Instagram, etc.)" autocomplete="off"
+                    style="flex:1;">
+                <button id="downloadBtn" class="btn" style="flex:0 0 auto;min-width:180px;" onclick="startDownload()">
+                    Download & Convert
+                </button>
+            </div>
+            <div style="font-size:14px;color:#777;">Downloads are saved into the selected project. Titles are auto-named
+                from the source.</div>
+        </div>
+
+        <div id="errorMessage" class="error-message"></div>
+
+        <div id="progressContainer" class="progress-container">
+            <div class="status-text" id="statusText">Starting...</div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+        </div>
+
+        <div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:20px;">
+            <div style="flex:1 1 280px;">
+                <h3 style="margin-bottom:10px;color:#444;">Projects</h3>
+                <ul id="projectList"
+                    style="list-style:none;padding:0;margin:0;max-height:250px;overflow:auto;border:1px solid #eee;border-radius:12px;">
+                </ul>
+            </div>
+            <div style="flex:2 1 400px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                    <h3 style="color:#444;">Videos</h3>
+                    <div style="display:flex;gap:10px;">
+                        <button class="btn"
+                            style="width:auto;padding:10px 16px;font-size:14px;background:linear-gradient(135deg,#6366f1,#4f46e5);"
+                            onclick="openReelFeed()">📱 Reel View</button>
+                        <button class="btn" style="width:auto;padding:10px 16px;font-size:14px;"
+                            onclick="loadVideos(currentProjectId)">Refresh</button>
+                    </div>
+                </div>
+                <ul id="videoList"
+                    style="list-style:none;padding:0;margin:0;max-height:300px;overflow:auto;border:1px solid #eee;border-radius:12px;">
+            </div>
+        </div>
+
+        <!-- Split Settings -->
+        <div id="splitSettings"
+            style="display:none;margin-top:20px;padding:20px;background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;">
+            <h4 style="margin-bottom:10px;">Scene Detection Settings</h4>
+            <div style="display:grid;grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div>
+                    <label style="font-size:14px;color:#64748b;display:block;margin-bottom:5px;">Min Clip Length
+                        (sec):</label>
+                    <input type="number" id="minSceneLen" value="2" min="0.1" step="0.1" class="url-input"
+                        style="padding:8px 12px;width:100%;">
+                </div>
+                <div>
+                    <label style="font-size:14px;color:#64748b;display:block;margin-bottom:5px;">Sensitivity (3.0 =
+                        Default):</label>
+                    <input type="range" id="splitThreshold" min="1" max="100" value="3" style="width:100%;"
+                        oninput="document.getElementById('thresholdVal').innerText = this.value">
+                    <span id="thresholdVal" style="font-size:12px;color:#666;">3</span>
+                </div>
+            </div>
+            <div style="margin-top:15px;display:flex;gap:10px;">
+                <button class="btn" style="width:auto;padding:8px 16px;font-size:14px;" onclick="confirmSplit()">Start
+                    Splitting</button>
+                <button class="btn" style="width:auto;padding:8px 16px;font-size:14px;background:#cbd5e1;color:#475569;"
+                    onclick="document.getElementById('splitSettings').style.display='none'">Cancel</button>
+            </div>
+        </div>
+
+        <div id="videoContainer" class="video-container" style="margin-top:25px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                <div>
+                    <div id="videoTitle" style="font-weight:700;color:#333;"></div>
+                    <div id="videoFilename" style="color:#777;font-size:14px;"></div>
+                </div>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                    <button class="btn" style="width:auto;padding:10px 12px;font-size:14px;"
+                        onclick="promptCaption('word')">Word captions</button>
+                    <button class="btn" style="width:auto;padding:10px 12px;font-size:14px;"
+                        onclick="promptCaption('sentence')">Sentence captions</button>
+                    <button class="btn"
+                        style="width:auto;padding:10px 12px;font-size:14px;background:linear-gradient(135deg,#60a5fa,#3b82f6);"
+                        onclick="showSplitSettings()">Split into Scenes</button>
+                    <button class="btn"
+                        style="width:auto;padding:10px 12px;font-size:14px;background:linear-gradient(135deg,#f87171,#ef4444);"
+                        onclick="deleteCurrentVideo()">Delete video</button>
+                </div>
+            </div>
+            <video id="videoPlayer" controls preload="metadata">
+                Your browser does not support the video tag.
+            </video>
+            <br>
+            <a id="downloadLink" class="download-btn" download>Download Video</a>
+            <div id="captionLinks" style="margin-top:12px;text-align:left;color:#555;font-size:14px;"></div>
+        </div>
+    </div>
+
+    <!-- TikTok Style Reel Feed Overlay -->
+    <div id="reelOverlay" class="reel-overlay">
+        <div class="reel-header">
+            <button class="reel-close" onclick="closeReelFeed()">✕ Close</button>
+            <div id="reelProjectName" style="font-weight:600;">Project Name</div>
+        </div>
+        <div id="reelContainer" class="reel-container">
+            <!-- Reels will be injected here -->
+        </div>
+    </div>
+
+    <script>
+        let currentFileId = null;
+        let currentProjectId = null;
+        let statusCheckInterval = null;
+        let statusCheckFailures = 0;
+        const MAX_STATUS_FAILURES = 5;
+        let lastProgress = 0;
+        let progressStallTimeout = null;
+
+        async function loadProjects() {
+            try {
+                const res = await fetch('/api/projects');
+                const projects = await res.json();
+                const select = document.getElementById('projectSelect');
+                const list = document.getElementById('projectList');
+                select.innerHTML = '';
+                list.innerHTML = '';
+                if (!projects.length) {
+                    const opt = document.createElement('option');
+                    opt.value = '';
+                    opt.textContent = 'Create a project first';
+                    select.appendChild(opt);
+                    return;
+                }
+                projects.forEach((p, idx) => {
+                    const opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.textContent = p.name;
+                    select.appendChild(opt);
+
+                    const li = document.createElement('li');
+                    li.style.padding = '12px 14px';
+                    li.style.cursor = 'pointer';
+                    li.style.borderBottom = '1px solid #f0f0f0';
+                    li.dataset.id = p.id;
+                    li.innerHTML = `<div style="font-weight:600;color:#333;">${p.name}</div><div style="color:#888;font-size:12px;">${p.id}</div>`;
+                    li.onclick = () => selectProject(p.id);
+                    list.appendChild(li);
+
+                    if (idx === 0 && !currentProjectId) {
+                        currentProjectId = p.id;
+                    }
+                });
+                if (currentProjectId) {
+                    select.value = currentProjectId;
+                }
+                highlightSelectedProject();
+                if (currentProjectId) {
+                    loadVideos(currentProjectId);
+                }
+            } catch (err) {
+                console.error('Failed to load projects', err);
+            }
+        }
+
+        function refreshProjects() {
+            currentProjectId = null;
+            loadProjects();
+        }
+
+        function highlightSelectedProject() {
+            const list = document.getElementById('projectList').children;
+            for (const li of list) {
+                if (li.dataset.id === currentProjectId) {
+                    li.style.background = '#f4f6ff';
+                    li.style.borderLeft = '4px solid #667eea';
+                } else {
+                    li.style.background = 'white';
+                    li.style.borderLeft = 'none';
+                }
+            }
+        }
+
+        function handleProjectChange() {
+            currentProjectId = document.getElementById('projectSelect').value;
+            highlightSelectedProject();
+            loadVideos(currentProjectId);
+        }
+
+        function selectProject(id) {
+            currentProjectId = id;
+            document.getElementById('projectSelect').value = id;
+            highlightSelectedProject();
+            loadVideos(id);
+        }
+
+        async function loadVideos(projectId) {
+            const list = document.getElementById('videoList');
+            list.innerHTML = '';
+            if (!projectId) return;
+            try {
+                const res = await fetch(`/api/projects/${projectId}/videos`);
+                const videos = await res.json();
+                if (!videos.length) {
+                    list.innerHTML = `<li style="padding:12px;color:#777;">No videos yet. Download one above.</li>`;
+                    return;
+                }
+                videos.forEach(v => {
+                    const li = document.createElement('li');
+                    li.style.padding = '12px 14px';
+                    li.style.borderBottom = '1px solid #f0f0f0';
+                    li.style.cursor = 'pointer';
+                    li.id = `video-${v.id}`;
+                    li.dataset.id = v.id;
+                    li.dataset.filename = v.filename;
+                    li.dataset.title = v.title || v.filename;
+                    li.innerHTML = `
+                        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+                            <div>
+                                <div style="font-weight:600;color:#333;">${v.title || v.filename}</div>
+                                <div style="color:#888;font-size:12px;">${v.filename}</div>
+                            </div>
+                            <div style="display:flex;gap:8px;">
+                                <button class="btn" style="width:auto;padding:8px 10px;font-size:12px;" onclick="event.stopPropagation(); openVideo('${v.id}', '${v.filename}', '${v.title || ''}', '${projectId}')">Open</button>
+                                <button class="btn" style="width:auto;padding:8px 10px;font-size:12px;background:linear-gradient(135deg,#f87171,#ef4444);" onclick="event.stopPropagation(); deleteVideo('${projectId}','${v.id}')">Delete</button>
+                            </div>
+                        </div>
+                    `;
+                    li.onclick = () => openVideo(v.id, v.filename, v.title || '', projectId);
+                    list.appendChild(li);
+                });
+            } catch (err) {
+                showError('Failed to load videos');
+            }
+        }
+
+        async function createProject() {
+            const name = document.getElementById('newProjectName').value.trim();
+            if (!name) {
+                showError('Enter a project name');
+                return;
+            }
+            try {
+                const res = await fetch('/api/projects', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name })
+                });
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    throw new Error(data.error || 'Failed to create project');
+                }
+                document.getElementById('newProjectName').value = '';
+                await loadProjects();
+            } catch (err) {
+                showError(err.message || 'Failed to create project');
+            }
+        }
+
+        function resetUI() {
+            const btn = document.getElementById('downloadBtn');
+            btn.disabled = false;
+            btn.innerHTML = 'Download & Convert';
+            btn.textContent = 'Download & Convert';
+        }
+
+        function showError(message, isRetryable = false) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.classList.add('active');
+
+            // Show retry button if error is retryable
+            if (isRetryable && currentFileId) {
+                setTimeout(() => {
+                    const retryBtn = document.createElement('button');
+                    retryBtn.className = 'btn';
+                    retryBtn.style.marginTop = '10px';
+                    retryBtn.textContent = 'Retry';
+                    retryBtn.onclick = () => {
+                        errorDiv.removeChild(retryBtn);
+                        startDownload();
+                    };
+                    errorDiv.appendChild(retryBtn);
+                }, 100);
+            }
+
+            setTimeout(() => {
+                if (errorDiv.classList.contains('active')) {
+                    errorDiv.classList.remove('active');
+                }
+            }, 8000);
+        }
+
+        function updateProgress(progress, status) {
+            const progressFill = document.getElementById('progressFill');
+            const statusText = document.getElementById('statusText');
+            const progressContainer = document.getElementById('progressContainer');
+
+            progress = Math.max(0, Math.min(100, progress)); // Clamp between 0-100
+            progressFill.style.width = progress + '%';
+
+            const statusMessages = {
+                'starting': 'Initializing...',
+                'downloading': 'Downloading video...',
+                'downloaded': 'Download complete, processing...',
+                'processing': 'Converting to TikTok format (this may take a while)...',
+                'completed': 'Processing complete!',
+                'error': 'Error occurred',
+                'not_found': 'Processing not found'
+            };
+
+            statusText.textContent = statusMessages[status] || status;
+            progressContainer.classList.add('active');
+
+            if (progress === lastProgress && status !== 'completed' && status !== 'error') {
+                if (progressStallTimeout) {
+                    clearTimeout(progressStallTimeout);
+                }
+                progressStallTimeout = setTimeout(() => {
+                    if (lastProgress === progress) {
+                        console.warn('Progress stalled, checking status...');
+                    }
+                }, 30000);
+            } else {
+                if (progressStallTimeout) {
+                    clearTimeout(progressStallTimeout);
+                    progressStallTimeout = null;
+                }
+            }
+
+            lastProgress = progress;
+        }
+
+        function showVideo(filename, projectId) {
+            const videoContainer = document.getElementById('videoContainer');
+            const videoPlayer = document.getElementById('videoPlayer');
+            const downloadLink = document.getElementById('downloadLink');
+
+            const videoUrl = `/api/video/${projectId}/${filename}`;
+            videoPlayer.src = videoUrl;
+            downloadLink.href = videoUrl;
+            downloadLink.download = filename;
+
+            videoContainer.classList.add('active');
+
+            if (statusCheckInterval) {
+                clearInterval(statusCheckInterval);
+                statusCheckInterval = null;
+            }
+
+            resetUI();
+            statusCheckFailures = 0;
+        }
+
+        function renderCaptions(captions, projectId) {
+            const container = document.getElementById('captionLinks');
+            container.innerHTML = '';
+            if (!captions || !captions.length) {
+                container.textContent = 'No captions yet.';
+                return;
+            }
+            const title = document.createElement('div');
+            title.style.fontWeight = 'bold';
+            title.style.marginBottom = '5px';
+            title.textContent = 'Captions (click to download, or use Burn):';
+            container.appendChild(title);
+
+            captions.forEach(c => {
+                const wrapper = document.createElement('div');
+                wrapper.style.display = 'flex';
+                wrapper.style.alignItems = 'center';
+                wrapper.style.gap = '10px';
+                wrapper.style.marginBottom = '5px';
+
+                const link = document.createElement('a');
+                link.href = `/api/caption/${projectId}/${c}`;
+                link.textContent = c;
+                link.style.color = '#4f46e5';
+                link.style.textDecoration = 'none';
+                link.download = c;
+
+                const burnBtn = document.createElement('button');
+                burnBtn.textContent = '🔥 Burn';
+                burnBtn.className = 'btn';
+                burnBtn.style.width = 'auto';
+                burnBtn.style.padding = '4px 8px';
+                burnBtn.style.fontSize = '12px';
+                burnBtn.onclick = () => burnCaptions(c);
+
+                wrapper.appendChild(link);
+                wrapper.appendChild(burnBtn);
+                container.appendChild(wrapper);
+            });
+        }
+
+
+        async function openVideo(id, filename, title, projectId) {
+            currentProjectId = projectId;
+            document.getElementById('projectSelect').value = projectId;
+            highlightSelectedProject();
+
+            document.getElementById('videoTitle').textContent = title || filename;
+            document.getElementById('videoFilename').textContent = filename;
+            document.getElementById('videoContainer').classList.add('active');
+            document.getElementById('downloadLink').href = `/api/video/${projectId}/${filename}`;
+            document.getElementById('downloadLink').download = filename;
+            document.getElementById('videoPlayer').src = `/api/video/${projectId}/${filename}`;
+
+            // Load caption list
+            try {
+                const res = await fetch(`/api/projects/${projectId}/videos/${id}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    renderCaptions(data.captions || [], projectId);
+                } else {
+                    renderCaptions([], projectId);
+                }
+            } catch (e) {
+                renderCaptions([], projectId);
+            }
+
+            // Store current video info for actions
+            window.__currentVideo = { id, filename, projectId };
+        }
+
+        async function deleteVideo(projectId, videoId) {
+            if (!confirm('Delete this video and its captions?')) return;
+            try {
+                const res = await fetch(`/api/projects/${projectId}/videos/${videoId}`, { method: 'DELETE' });
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    throw new Error(data.error || 'Failed to delete');
+                }
+                loadVideos(projectId);
+                if (window.__currentVideo && window.__currentVideo.id === videoId) {
+                    document.getElementById('videoContainer').classList.remove('active');
+                }
+            } catch (err) {
+                showError(err.message || 'Delete failed');
+            }
+        }
+
+        function deleteCurrentVideo() {
+            if (!window.__currentVideo) return;
+            deleteVideo(window.__currentVideo.projectId, window.__currentVideo.id);
+        }
+
+        async function promptCaption(level) {
+            if (!window.__currentVideo) {
+                showError('Open a video first');
+                return;
+            }
+            const model = prompt('Whisper model size (e.g., tiny, base, small, medium). Default: tiny', 'tiny') || 'tiny';
+            generateCaption(level, model);
+        }
+
+        async function generateCaption(level, model) {
+            if (!window.__currentVideo) return;
+            const { projectId, filename } = window.__currentVideo;
+
+            // Re-use main progress bar
+            document.getElementById('progressContainer').classList.add('active');
+            updateProgress(0, 'starting');
+
+            try {
+                const res = await fetch(`/api/projects/${projectId}/videos/${encodeURIComponent(filename)}/caption`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ level, model })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Failed to start captioning');
+
+                const statusId = data.id;
+                const poll = setInterval(async () => {
+                    try {
+                        const sres = await fetch(`/api/status/${encodeURIComponent(statusId)}`);
+                        if (!sres.ok) return;
+                        const sdata = await sres.json();
+
+                        updateProgress(sdata.progress || 0, sdata.status || 'processing');
+
+                        if (sdata.status === 'completed') {
+                            clearInterval(poll);
+                            loadVideos(projectId);
+                            if (window.__currentVideo) {
+                                openVideo(window.__currentVideo.id, window.__currentVideo.filename, window.__currentVideo.title, projectId);
+                            }
+                            showError('Caption generated successfully!', false);
+                            setTimeout(() => {
+                                document.getElementById('progressContainer').classList.remove('active');
+                            }, 2000);
+                        } else if (sdata.status === 'error') {
+                            clearInterval(poll);
+                            showError(sdata.error || 'Caption generation failed', true);
+                        }
+                    } catch (err) {
+                        console.error(err);
+                    }
+                }, 2000);
+            } catch (err) {
+                showError(err.message || 'Failed to start caption');
+            }
+        }
+
+        async function burnCaptions(captionFile) {
+            if (!window.__currentVideo) return;
+            const { projectId, id: videoId } = window.__currentVideo;
+
+            if (!confirm(`Burn ${captionFile} into the video? This will create a new video file.`)) return;
+
+            document.getElementById('progressContainer').classList.add('active');
+            updateProgress(0, 'starting');
+
+            try {
+                const res = await fetch(`/api/projects/${projectId}/videos/${videoId}/burn`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ caption_file: captionFile })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Failed to start burning');
+
+                const statusId = data.id;
+                const poll = setInterval(async () => {
+                    try {
+                        const sres = await fetch(`/api/status/${encodeURIComponent(statusId)}`);
+                        if (!sres.ok) return;
+                        const sdata = await sres.json();
+
+                        updateProgress(sdata.progress || 0, sdata.status || 'burning');
+
+                        if (sdata.status === 'completed') {
+                            clearInterval(poll);
+                            loadVideos(projectId);
+                            showError('Captions burned successfully! New video added to project.', false);
+                            setTimeout(() => {
+                                document.getElementById('progressContainer').classList.remove('active');
+                            }, 2000);
+                        } else if (sdata.status === 'error') {
+                            clearInterval(poll);
+                            showError(sdata.error || 'Burning failed', true);
+                        }
+                    } catch (err) {
+                        console.error(err);
+                    }
+                }, 2000);
+            } catch (err) {
+                showError(err.message || 'Failed to start burning');
+            }
+        }
+
+        function showSplitSettings() {
+            document.getElementById('splitSettings').style.display = 'block';
+            document.getElementById('splitSettings').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        async function confirmSplit() {
+            const minLen = document.getElementById('minSceneLen').value;
+            const threshold = document.getElementById('splitThreshold').value;
+            document.getElementById('splitSettings').style.display = 'none';
+            splitVideoIntoScenes(minLen, threshold);
+        }
+
+        async function splitVideoIntoScenes(minSceneLen = 2.0, threshold = 3.0) {
+            if (!window.__currentVideo) return;
+            const { projectId, id: videoId } = window.__currentVideo;
+
+            document.getElementById('progressContainer').classList.add('active');
+            updateProgress(0, 'starting');
+
+            try {
+                const res = await fetch(`/api/projects/${projectId}/videos/${videoId}/split-scenes`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        min_scene_len: parseFloat(minSceneLen),
+                        threshold: parseFloat(threshold)
+                    })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Failed to start splitting');
+
+                const statusId = data.id;
+                const poll = setInterval(async () => {
+                    try {
+                        const sres = await fetch(`/api/status/${encodeURIComponent(statusId)}`);
+                        if (!sres.ok) return;
+                        const sdata = await sres.json();
+
+                        updateProgress(sdata.progress || 0, sdata.status || 'processing');
+
+                        if (sdata.status === 'completed') {
+                            clearInterval(poll);
+                            loadVideos(projectId);
+                            showError(`Successfully split into ${sdata.clips_count} clips!`, false);
+                            setTimeout(() => {
+                                document.getElementById('progressContainer').classList.remove('active');
+                            }, 2000);
+                        } else if (sdata.status === 'error') {
+                            clearInterval(poll);
+                            showError(sdata.error || 'Splitting failed', true);
+                        }
+                    } catch (err) {
+                        console.error(err);
+                    }
+                }, 2000);
+            } catch (err) {
+                showError(err.message || 'Failed to start splitting');
+            }
+        }
+
+        /* REEL FEED LOGIC */
+        let reelObserver = null;
+
+        function openReelFeed() {
+            if (!currentProjectId) {
+                showError('Select a project first');
+                return;
+            }
+            const overlay = document.getElementById('reelOverlay');
+            const container = document.getElementById('reelContainer');
+            overlay.classList.add('active');
+
+            // Get all videos in project
+            const videoItems = document.querySelectorAll('#videoList li');
+            if (videoItems.length === 0) {
+                container.innerHTML = '<div style="color:white;text-align:center;padding:100px;">No videos found in this project.</div>';
+                return;
+            }
+
+            container.innerHTML = '';
+
+            videoItems.forEach((item, index) => {
+                const title = item.dataset.title;
+                const filename = item.dataset.filename;
+                const videoId = item.dataset.id;
+
+                if (!filename) return;
+
+                const reel = document.createElement('div');
+                reel.className = 'reel-item';
+                reel.innerHTML = `
+                    <video class="reel-video" loop playsinline muted>
+                        <source src="/api/video/${currentProjectId}/${encodeURIComponent(filename)}" type="video/mp4">
+                    </video>
+                    <div class="reel-info" style="bottom: 100px;">
+                        <h2 style="font-size: 24px;">${title}</h2>
+                        <p style="opacity: 0.7;">${filename}</p>
+                    </div>
+                    <div class="reel-controls">
+                        <button class="reel-btn" onclick="deleteVideo('${currentProjectId}', '${videoId}')">🗑️</button>
+                        <button class="reel-btn" onclick="window.open('/api/video/${currentProjectId}/${encodeURIComponent(filename)}', '_blank')">⬇️</button>
+                    </div>
+                `;
+                container.appendChild(reel);
+            });
+
+            // Auto-play observer
+            if (reelObserver) reelObserver.disconnect();
+            reelObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    const video = entry.target.querySelector('video');
+                    if (entry.isIntersecting) {
+                        video.play();
+                    } else {
+                        video.pause();
+                        video.currentTime = 0;
+                    }
+                });
+            }, { threshold: 0.8 });
+
+            document.querySelectorAll('.reel-item').forEach(item => reelObserver.observe(item));
+        }
+
+        function closeReelFeed() {
+            document.getElementById('reelOverlay').classList.remove('active');
+            document.querySelectorAll('.reel-video').forEach(v => v.pause());
+            if (reelObserver) reelObserver.disconnect();
+        }
+
+        async function checkStatus(fileId) {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+                const response = await fetch(`/api/status/${fileId}`, {
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        statusCheckFailures++;
+                        if (statusCheckFailures >= MAX_STATUS_FAILURES) {
+                            showError('Processing not found. Please try again.', true);
+                            if (statusCheckInterval) {
+                                clearInterval(statusCheckInterval);
+                                statusCheckInterval = null;
+                            }
+                            resetUI();
+                        }
+                        return;
+                    }
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+                statusCheckFailures = 0;
+
+                if (data.status === 'completed' && data.file) {
+                    updateProgress(100, 'completed');
+                    setTimeout(() => {
+                        showVideo(data.file, data.project_id || currentProjectId);
+                        if (currentProjectId) loadVideos(currentProjectId);
+                    }, 500);
+                } else if (data.status === 'error') {
+                    const errorMsg = data.error || 'An error occurred during processing';
+                    const isRetryable = !errorMsg.includes('FFmpeg is not installed') &&
+                        !errorMsg.includes('Invalid URL');
+                    showError(errorMsg, isRetryable);
+                    if (statusCheckInterval) {
+                        clearInterval(statusCheckInterval);
+                        statusCheckInterval = null;
+                    }
+                    resetUI();
+                } else if (data.status === 'not_found') {
+                    statusCheckFailures++;
+                    if (statusCheckFailures >= MAX_STATUS_FAILURES) {
+                        showError('Processing not found. Please try again.', true);
+                        if (statusCheckInterval) {
+                            clearInterval(statusCheckInterval);
+                            statusCheckInterval = null;
+                        }
+                        resetUI();
+                    }
+                } else {
+                    updateProgress(data.progress || 0, data.status || 'processing');
+                }
+            } catch (error) {
+                console.error('Status check error:', error);
+            }
+        }
+
+        async function startDownload() {
+            const urlInput = document.getElementById('urlInput');
+            const url = urlInput.value.trim();
+            const projectSelect = document.getElementById('projectSelect');
+            currentProjectId = projectSelect.value;
+
+            if (!url) {
+                showError('Please enter a valid URL');
+                return;
+            }
+
+            if (!currentProjectId) {
+                showError('Select or create a project first');
+                return;
+            }
+
+            try { new URL(url); } catch (e) {
+                showError('Invalid URL format. Please enter a valid URL.');
+                return;
+            }
+
+            statusCheckFailures = 0;
+            lastProgress = 0;
+            if (statusCheckInterval) {
+                clearInterval(statusCheckInterval);
+                statusCheckInterval = null;
+            }
+            if (progressStallTimeout) {
+                clearTimeout(progressStallTimeout);
+                progressStallTimeout = null;
+            }
+
+            document.getElementById('videoContainer').classList.remove('active');
+            document.getElementById('errorMessage').classList.remove('active');
+            document.getElementById('downloadBtn').disabled = true;
+            document.getElementById('downloadBtn').innerHTML = '<span class="loading-spinner"></span>Processing...';
+
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+                const response = await fetch('/api/download', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ url: url, project_id: currentProjectId }),
+                    signal: controller.signal
+                });
+
+                clearTimeout(timeoutId);
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error || `HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data.id) {
+                    currentFileId = data.id;
+                    updateProgress(0, 'starting');
+
+                    statusCheckInterval = setInterval(() => {
+                        checkStatus(currentFileId);
+                    }, 1000);
+                } else {
+                    throw new Error(data.error || 'Failed to start download');
+                }
+            } catch (error) {
+                showError(error.message || 'Network error', true);
+                resetUI();
+            }
+        }
+
+        document.getElementById('urlInput').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter' && !document.getElementById('downloadBtn').disabled) {
+                startDownload();
+            }
+        });
+
+        window.addEventListener('beforeunload', function () {
+            if (statusCheckInterval) {
+                clearInterval(statusCheckInterval);
+            }
+            if (progressStallTimeout) {
+                clearTimeout(progressStallTimeout);
+            }
+        });
+
+        // init
+        loadProjects();
+    </script>
+</body>
+
+</html>
