@@ -93,7 +93,7 @@ function switchView(viewName) {
     }
     if (viewName === 'jobs') {
         loadFullJobHistory();
-        viewPollingInterval = setInterval(loadFullJobHistory, 4000);
+        viewPollingInterval = setInterval(loadFullJobHistory, 6000);
     }
     if (viewName === 'storage') {
         loadStorageData();
@@ -203,8 +203,8 @@ function selectProjectById(id, name) {
     switchView('project-detail');
     loadVideos(id);
 
-    // Start polling for this project's videos
-    viewPollingInterval = setInterval(() => loadVideos(id), 3000);
+    // Start polling for this project's videos (Reduced rate)
+    viewPollingInterval = setInterval(() => loadVideos(id), 5000);
 }
 
 async function createProject() {
@@ -679,7 +679,7 @@ async function confirmStyledBurn() {
 // --- Job Monitoring ---
 function startJobMonitor() {
     if (jobMonitorInterval) clearInterval(jobMonitorInterval);
-    jobMonitorInterval = setInterval(updateJobs, 2000);
+    jobMonitorInterval = setInterval(updateJobs, 5000);
 }
 
 async function updateJobs() {
@@ -1259,4 +1259,80 @@ async function importFileFromServer(path) {
             closeServerImportModal();
         }
     } catch (e) { showError('Failed to start recovery'); }
+}
+// --- Reel Mode Logic ---
+let reelVideos = [];
+let currentReelIndex = 0;
+
+async function openReelView() {
+    if (!currentProjectId) return;
+    try {
+        const res = await fetch(`/api/projects/${currentProjectId}/videos`);
+        const videos = await res.json();
+
+        // Prefer clips, but show all if no clips exist
+        reelVideos = videos.filter(v => v.is_clip);
+        if (reelVideos.length === 0) reelVideos = videos;
+
+        if (reelVideos.length === 0) return showError('No videos to display in Reel Mode');
+
+        currentReelIndex = 0;
+        document.getElementById('reelModal').style.display = 'flex';
+        renderReel(currentReelIndex);
+
+        // Keyboard navigation
+        window.__reelKeyListener = (e) => {
+            if (e.key === 'ArrowDown') nextReel();
+            if (e.key === 'ArrowUp') prevReel();
+            if (e.key === 'Escape') closeReelView();
+        };
+        window.addEventListener('keydown', window.__reelKeyListener);
+
+    } catch (e) { showError('Failed to load reel'); }
+}
+
+function renderReel(index) {
+    const v = reelVideos[index];
+    const videoEl = document.getElementById('reelVideo');
+    const titleEl = document.getElementById('reelTitle');
+    const subtitleEl = document.getElementById('reelSubtitle');
+    const progressEl = document.getElementById('reelProgress');
+    const dlBtn = document.getElementById('reelDownloadBtn');
+
+    videoEl.src = `/api/stream/${v.project_id}/${v.filename}`;
+    videoEl.play();
+
+    titleEl.textContent = v.title || v.filename;
+    subtitleEl.textContent = `${document.getElementById('current-project-title').textContent} • Clip ${index + 1}/${reelVideos.length}`;
+
+    dlBtn.onclick = () => window.open(`/api/video/${v.project_id}/${v.filename}`, '_blank');
+
+    videoEl.ontimeupdate = () => {
+        const p = (videoEl.currentTime / videoEl.duration) * 100;
+        progressEl.style.width = p + '%';
+    };
+}
+
+function nextReel() {
+    if (currentReelIndex < reelVideos.length - 1) {
+        currentReelIndex++;
+        renderReel(currentReelIndex);
+    } else {
+        showError('Last video reached', false);
+    }
+}
+
+function prevReel() {
+    if (currentReelIndex > 0) {
+        currentReelIndex--;
+        renderReel(currentReelIndex);
+    }
+}
+
+function closeReelView() {
+    const videoEl = document.getElementById('reelVideo');
+    videoEl.pause();
+    videoEl.src = '';
+    document.getElementById('reelModal').style.display = 'none';
+    window.removeEventListener('keydown', window.__reelKeyListener);
 }

@@ -137,6 +137,43 @@ def convert_to_tiktok_aspect(input_path, output_path, status_key):
         thread_safe_status_update(status_key, {'status': 'error', 'error': str(e)})
         raise
 
+def safe_import_video(input_path, output_path, status_key):
+    """
+    Import video safely.
+    - If MKV: Convert to MP4 (h264/aac) for web compatibility.
+    - Else: Just copy/move the file to preserve original encoding (no normalization).
+    Returns: The final absolute path of the imported file.
+    """
+    try:
+        thread_safe_status_update(status_key, {'status': 'importing', 'progress': 20})
+        
+        ext = os.path.splitext(input_path)[1].lower()
+        # Ensure we have a clean base for the output
+        base_output = os.path.splitext(output_path)[0]
+        
+        if ext == '.mkv':
+            logger.info(f"Safe import: MKV detected, normalizing to MP4: {input_path}")
+            final_path = f"{base_output}.mp4"
+            # Full conversion for MKV as it's often not web-compatible
+            cmd = [
+                'ffmpeg', '-i', input_path,
+                '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+                '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', '-y', final_path
+            ]
+            subprocess.run(cmd, check=True, timeout=Config.PROCESS_TIMEOUT)
+            return final_path
+        else:
+            logger.info(f"Safe import: Using source format ({ext}) for: {input_path}")
+            # Keep original extension to avoid normalization
+            final_path = f"{base_output}{ext}"
+            shutil.copy2(input_path, final_path)
+            return final_path
+            
+    except Exception as e:
+        logger.error(f"Safe import error: {str(e)}")
+        thread_safe_status_update(status_key, {'status': 'error', 'error': str(e)})
+        raise
+
 @retry_on_failure(max_retries=2, delay=2)
 def split_scenes(input_path, output_dir, status_key, min_scene_len=2.0, threshold=3.0):
     """Split video based on scene detection."""

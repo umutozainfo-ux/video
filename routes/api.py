@@ -463,22 +463,43 @@ def storage_files():
 
 @api_bp.route('/browser/staged')
 def list_staged_files():
-    """List files in the browser staging area."""
-    stage_dir = os.path.join(Config.UPLOAD_FOLDER, 'browser_staged')
-    if not os.path.exists(stage_dir):
-        return jsonify([])
-        
+    """List files in the storage area that could be imported (staged and general uploads)."""
+    scan_dirs = [
+        ('Staged', os.path.join(Config.UPLOAD_FOLDER, 'browser_staged')),
+        ('Uploads', Config.UPLOAD_FOLDER)
+    ]
+    
     files = []
-    for f in os.listdir(stage_dir):
-        p = os.path.join(stage_dir, f)
-        if os.path.isfile(p):
-            stat = os.stat(p)
-            files.append({
-                'name': f,
-                'path': p,
-                'size': stat.st_size,
-                'created_at': datetime.fromtimestamp(stat.st_ctime).isoformat()
-            })
+    seen_paths = set()
+    
+    for label, dir_path in scan_dirs:
+        if not os.path.exists(dir_path):
+            continue
+            
+        try:
+            for f in os.listdir(dir_path):
+                p = os.path.join(dir_path, f)
+                abs_p = os.path.abspath(p)
+                
+                if os.path.isfile(p) and abs_p not in seen_paths:
+                    # Only show video files
+                    if f.lower().endswith(('.mp4', '.mkv', '.mov', '.avi', '.webm', '.flv')):
+                        # Skip files that look like they belong to the DB or are already processed
+                        if f.startswith('raw_'): continue
+                        
+                        stat = os.stat(p)
+                        files.append({
+                            'name': f if label == 'Uploads' else f"[Staged] {f}",
+                            'display_name': f,
+                            'path': abs_p,
+                            'size': stat.st_size,
+                            'created_at': datetime.fromtimestamp(stat.st_ctime).isoformat(),
+                            'source': label
+                        })
+                        seen_paths.add(abs_p)
+        except Exception as e:
+            logger.error(f"Error scanning {dir_path}: {e}")
+            
     return jsonify(sorted(files, key=lambda x: x['created_at'], reverse=True))
 
 @api_bp.route('/import/server-file', methods=['POST'])

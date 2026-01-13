@@ -68,22 +68,30 @@ def burn_captions(video_path, srt_path, output_path, status_key, style=None):
         letter_spacing = style.get('letterSpacing', 0)
         shadow_intensity = style.get('shadowBlur', 0)
 
-        # Mapping for common professional fonts on Windows/FFmpeg
+        # Professional standard font mapping for Windows environments
+        # We try to use the requested font name directly first.
+        # This mapping is used as a fallback or hint for common viral fonts.
         font_map = {
-            'Bebas Neue': 'Bebas Neue',
-            'Luckiest Guy': 'Luckiest Guy',
-            'Anton': 'Anton',
-            'Bangers': 'Bangers',
-            'Roboto': 'Roboto Black',
-            'Archivo Black': 'Archivo Black',
-            'Oswald': 'Oswald Bold',
-            'Fredoka One': 'Fredoka One',
-            'Titan One': 'Titan One',
-            'Permanent Marker': 'Permanent Marker'
+            'Bebas Neue': 'Impact',
+            'Anton': 'Arial Black',
+            'Luckiest Guy': 'Arial Black',
+            'Bangers': 'Impact',
+            'Roboto': 'Roboto Black', 
+            'Archivo Black': 'Arial Black',
+            'Oswald': 'Verdana',
+            'Titan One': 'Impact',
+            'Permanent Marker': 'Comic Sans MS',
+            'Fredoka One': 'Arial Black'
         }
-        font_name = font_map.get(font_name, font_name)
+        
+        # Determine the target font for FFmpeg
+        # We'll try the requested font name first as it might be installed
+        # but we also provide the mapped version as a secondary attempt if needed.
+        target_font = font_name
+        system_fallback = font_map.get(font_name, 'Arial Black')
 
         def to_ass_color(hex_color):
+            if not hex_color: return "&H00FFFFFF"
             hex_val = hex_color.replace('#', '')
             if len(hex_val) == 6:
                 r, g, b = hex_val[:2], hex_val[2:4], hex_val[4:6]
@@ -97,16 +105,24 @@ def burn_captions(video_path, srt_path, output_path, status_key, style=None):
         srt_path_fixed = srt_path.replace('\\', '/').replace(':', '\\:')
         border_style = style.get('borderStyle', '1')
         
-        force_style = (
-            f"Fontname={font_name},FontSize={font_size},"
-            f"PrimaryColour={ass_primary},OutlineColour={ass_outline},BackColour={back_color},"
-            f"BorderStyle={border_style},Alignment={alignment},"
-            f"Spacing={letter_spacing},Blur={shadow_intensity},Outline=2,Shadow=2"
-        )
+        if alignment == '10': alignment = '8' # Top Center
+        
+        outline_val = 2 if border_style == '1' else 0
+        shadow_val = 2 if border_style == '1' else 0
 
-        vf = f"subtitles='{srt_path_fixed}':force_style='{force_style}'"
+        # Create the style string
+        def create_vf(font):
+            force_style = (
+                f"Fontname={font},FontSize={font_size},"
+                f"PrimaryColour={ass_primary},OutlineColour={ass_outline},BackColour={back_color},"
+                f"BorderStyle={border_style},Alignment={alignment},"
+                f"Spacing={letter_spacing},Blur={shadow_intensity},"
+                f"Outline={outline_val},Shadow={shadow_val}"
+            )
+            return f"subtitles='{srt_path_fixed}':force_style='{force_style}'"
 
-        logger.info(f"Burning with style: {force_style}")
+        vf = create_vf(target_font)
+        logger.info(f"Burning with font: {target_font}")
 
         cmd = [
             'ffmpeg', '-i', video_path, '-vf', vf,
@@ -114,21 +130,25 @@ def burn_captions(video_path, srt_path, output_path, status_key, style=None):
             '-c:a', 'copy', '-y', output_path
         ]
         
-        # Check if font exists by attempting render and falling back
-        # FFmpeg usually doesn't fail if font missing, it just falls back.
-        # But we catch stderr for other issues.
+        # FFmpeg usually doesn't fail if a font is missing (it just logs a warning and falls back)
+        # However, we'll check if the command succeeded and also check stderr for clues.
         result = subprocess.run(cmd, check=False, capture_output=True, text=True)
+        
         if result.returncode != 0:
             logger.error(f"FFmpeg Error: {result.stderr}")
-            # Fallback to Arial Black if something went wrong with the specialty font
-            if "font" in result.stderr.lower() or "subtitles" in result.stderr.lower():
-                logger.warning("Rendering failed or font missing, falling back to Arial Black")
-                force_style = force_style.replace(f"Fontname={font_name}", "Fontname=Arial Black")
-                vf = f"subtitles='{srt_path_fixed}':force_style='{force_style}'"
-                cmd[4] = vf
+            # If it failed and we suspect font/subtitles, try the fallback
+            if any(x in result.stderr.lower() for x in ["font", "subtitles", "filter", "ass"]):
+                logger.warning(f"Font '{target_font}' failed, trying system fallback '{system_fallback}'")
+                vf_fallback = create_vf(system_fallback)
+                cmd[4] = vf_fallback
                 subprocess.run(cmd, check=True)
             else:
                 raise Exception(f"FFmpeg failed: {result.stderr}")
+        
+        # Check if FFmpeg output contains font warning - if it does, the font likely wasn't used
+        # but the task completed. We logging it for debugging.
+        if "font select" in result.stderr.lower() or "find font" in result.stderr.lower():
+             logger.warning(f"FFmpeg mentioned font selection issues. Requested: {target_font}")
 
         thread_safe_status_update(status_key, {'status': 'completed', 'progress': 100})
         return True

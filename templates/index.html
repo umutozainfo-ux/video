@@ -184,6 +184,11 @@
                     style="padding-bottom:12px; border-bottom:1px solid var(--border-color); margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">
                     <h3 style="font-size:1.1rem;">Videos</h3>
                     <div style="display:flex; gap:8px;">
+                        <button class="btn btn-secondary"
+                            style="padding:4px 10px; font-size:0.75rem; background:#000; color:#fff;"
+                            onclick="openReelView()">
+                            <i class="fas fa-mobile-alt"></i> Reel Mode
+                        </button>
                         <button id="bulkDeleteBtn" class="btn btn-danger"
                             style="padding:4px 10px; font-size:0.75rem; display:none;" onclick="confirmBulkDelete()">
                             <i class="fas fa-trash"></i> Delete
@@ -655,7 +660,7 @@
     <div class="card"
         style="width:100%; max-width:600px; background:#fff; padding:32px; border-radius:24px; box-shadow:var(--shadow-lg);">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
-            <h2 style="font-size:1.4rem; font-weight:700;">Recover Staged Files</h2>
+            <h2 style="font-size:1.4rem; font-weight:700;">Safe Import / File Recovery</h2>
             <button class="btn btn-secondary" onclick="closeServerImportModal()"
                 style="padding:4px 12px;">Close</button>
         </div>
@@ -682,6 +687,24 @@
 
 <div id="errorMessage"
     style="display:none; position:fixed; top:20px; right:20px; z-index:9999; background:#fee2e2; color:#b91c1c; padding:16px; border-radius:8px; box-shadow:var(--shadow-lg);">
+</div>
+
+<!-- Reel View Modal (TikTok Style) -->
+<div id="reelModal" class="reel-modal">
+    <div class="reel-close" onclick="closeReelView()">✕</div>
+    <div class="reel-container">
+        <video id="reelVideo" class="reel-video" loop></video>
+        <div class="reel-nav">
+            <div class="reel-btn" onclick="prevReel()" title="Previous Clip"><i class="fas fa-chevron-up"></i></div>
+            <div class="reel-btn" onclick="nextReel()" title="Next Clip"><i class="fas fa-chevron-down"></i></div>
+            <div class="reel-btn" id="reelDownloadBtn" title="Download This Clip"><i class="fas fa-download"></i></div>
+        </div>
+        <div class="reel-info">
+            <div id="reelTitle" class="reel-title">Clip Name</div>
+            <div id="reelSubtitle" class="reel-subtitle">Project Name • 0:00</div>
+        </div>
+        <div id="reelProgress" class="reel-progress"></div>
+    </div>
 </div>
 
 {% endblock %}

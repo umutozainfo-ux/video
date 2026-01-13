@@ -507,3 +507,118 @@ body {
     background: #fee2e2;
     color: #991b1b;
 }
+
+/* Reel Mode */
+.reel-modal {
+    position: fixed;
+    inset: 0;
+    background: #000;
+    z-index: 10000;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: white;
+}
+
+.reel-container {
+    width: 100%;
+    max-width: 450px;
+    height: 90vh;
+    position: relative;
+    background: #111;
+    border-radius: 20px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 0 50px rgba(0,0,0,1);
+}
+
+.reel-video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #000;
+}
+
+.reel-nav {
+    position: absolute;
+    right: 20px;
+    bottom: 120px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    z-index: 10;
+}
+
+.reel-btn {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    backdrop-filter: blur(10px);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    font-size: 1.8rem;
+    transition: all 0.2s;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+.reel-btn:hover {
+    background: rgba(255,255,255,0.3);
+    transform: scale(1.1);
+}
+
+.reel-info {
+    position: absolute;
+    bottom: 30px;
+    left: 30px;
+    right: 100px;
+    pointer-events: none;
+    z-index: 10;
+}
+
+.reel-title {
+    font-weight: 700;
+    font-size: 1.25rem;
+    margin-bottom: 8px;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+.reel-subtitle {
+    font-size: 0.9rem;
+    opacity: 0.8;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+
+.reel-close {
+    position: absolute;
+    top: 30px;
+    right: 30px;
+    font-size: 2rem;
+    cursor: pointer;
+    z-index: 110;
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    background: rgba(0,0,0,0.5);
+    border-radius: 50%;
+    transition: all 0.2s;
+}
+
+.reel-close:hover {
+    background: rgba(255,0,0,0.6);
+}
+
+.reel-progress {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 4px;
+    background: var(--primary);
+    width: 0%;
+    z-index: 20;
+    transition: width 0.1s linear;
+}

@@ -13,6 +13,7 @@ from task_queue.job_queue import update_job_progress
 from services.video_service import (
     download_video,
     convert_to_tiktok_aspect,
+    safe_import_video,
     split_scenes,
     split_fixed,
     trim_video
@@ -102,11 +103,12 @@ def handle_upload_job(job: Dict[str, Any]) -> Dict[str, Any]:
     final_filename = f"{final_id}.mp4"
     final_path = os.path.join(Config.UPLOAD_FOLDER, final_filename)
     
-    update_job_progress(job['id'], 30, "Processing upload...")
-    convert_to_tiktok_aspect(temp_path, final_path, job['id'])
+    update_job_progress(job['id'], 30, "Importing video safely...")
+    final_path = safe_import_video(temp_path, final_path, job['id'])
+    final_filename = os.path.basename(final_path)
     
     # Remove original temp file
-    if os.path.exists(temp_path):
+    if os.path.exists(temp_path) and os.path.abspath(temp_path) != os.path.abspath(final_path):
         os.remove(temp_path)
         
     size_bytes = os.path.getsize(final_path) if os.path.exists(final_path) else None
@@ -230,8 +232,10 @@ def handle_burn_job(job: Dict[str, Any]) -> Dict[str, Any]:
     if not os.path.exists(caption_path):
         raise FileNotFoundError(f"Caption file not found: {caption_path}")
     
-    # Generate output filename
-    burned_filename = f"burned_{video['filename']}"
+    # Generate unique output filename to avoid browser caching
+    burned_filename = f"burned_{uuid.uuid4()}_{video['filename']}"
+    if not burned_filename.endswith('.mp4'):
+        burned_filename = os.path.splitext(burned_filename)[0] + '.mp4'
     output_path = os.path.join(Config.PROCESSED_FOLDER, burned_filename)
     
     update_job_progress(job['id'], 10, "Burning captions...")
@@ -492,11 +496,11 @@ def handle_browser_import_job(job: Dict[str, Any]) -> Dict[str, Any]:
     # To be "perfect", we'll use convert_to_tiktok_aspect to ensure vertical 9:16
     # as requested by the app's overall design for viral content.
     try:
-        convert_to_tiktok_aspect(temp_path, final_path, job['id'])
+        final_path = safe_import_video(temp_path, final_path, job['id'])
+        final_filename = os.path.basename(final_path)
     except Exception as e:
-        logger.error(f"Conversion failed, trying fallback move: {e}")
-        # If conversion fails (maybe not a video?), try to just move it as is
-        # but the user said "video", so we should try to make it work.
+        logger.error(f"Import failed, trying fallback move: {e}")
+        import shutil
         shutil.move(temp_path, final_path.replace('.mp4', os.path.splitext(original_name)[1]))
         final_filename = final_filename.replace('.mp4', os.path.splitext(original_name)[1])
     
