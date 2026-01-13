@@ -1,0 +1,21 @@
+{
+    "name": "AG Studio",
+    "short_name": "AG Studio",
+    "description": "Premium Video AI Editor",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#6366f1",
+    "icons": [
+        {
+            "src": "https://cdn-icons-png.flaticon.com/512/711/711245.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "https://cdn-icons-png.flaticon.com/512/711/711245.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}
