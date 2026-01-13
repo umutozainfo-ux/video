@@ -41,5 +41,6 @@ RUN mkdir -p downloads processed captions && \
 # Expose the port Hugging Face Spaces expects
 EXPOSE 7860
 
-# CMD uses xvfb-run to provide a virtual display
-CMD ["xvfb-run", "--server-args=-screen 0 1280x720x24", "python", "app.py"]
+# CMD uses xvfb-run to provide a virtual display for the browser if needed
+# We add -u to python for unbuffered output as an extra layer of safety
+CMD xvfb-run --server-args="-screen 0 1280x720x24" python -u app.py

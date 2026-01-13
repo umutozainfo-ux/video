@@ -1,4 +1,7 @@
 import os
+import sys
+print(">>> AG STUDIO SYSTEM BOOTING...", flush=True)
+
 from flask import Flask, request
 from flask_socketio import SocketIO, emit
 from config import Config, init_app_dirs
