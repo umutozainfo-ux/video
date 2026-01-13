@@ -10,7 +10,6 @@ class Config:
     UPLOAD_FOLDER = 'downloads'
     PROCESSED_FOLDER = 'processed'
     CAPTIONS_FOLDER = 'captions'
-    PROJECT_DATA_FILE = 'projects.json'  # Legacy, kept for migration
     
     # Database configuration
     DATABASE_PATH = 'video_platform.db'

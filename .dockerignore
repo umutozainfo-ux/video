@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.git/
+.env
+video_platform.db
+downloads/
+processed/
+captions/
+.agent/
+.gemini/
+README.md
+SYSTEM_DOCS.md
+*.bak
+*.backup.*

@@ -1,3 +1,4 @@
+import os
 from flask import Flask, request
 from flask_socketio import SocketIO, emit
 from config import Config, init_app_dirs
@@ -11,6 +12,9 @@ from services.browser_service import BrowserManager
 import logging
 import atexit
 import asyncio
+from dotenv import load_dotenv
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -127,10 +131,11 @@ if __name__ == '__main__':
     if not check_ffmpeg_available():
         logger.warning("FFmpeg not found! Video processing will fail. Please install FFmpeg.")
     
-    logger.info("Starting Flask-SocketIO server on http://0.0.0.0:5000")
+    port = int(os.environ.get('PORT', 5000))
+    logger.info(f"Starting Flask-SocketIO server on http://0.0.0.0:{port}")
     
     # Run a one-time cleanup on startup
     from utils.cleanup import run_storage_cleanup
     run_storage_cleanup(max_age_hours=48)
     
-    socketio.run(app, debug=False, host='0.0.0.0', port=5000, allow_unsafe_werkzeug=True)
+    socketio.run(app, debug=False, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True)

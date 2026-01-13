@@ -18,7 +18,6 @@ from utils.helpers import (
     ensure_project_dirs,
     retry_on_failure
 )
-from utils.storage import update_projects
 
 logger = logging.getLogger(__name__)
 
@@ -151,10 +150,9 @@ def safe_import_video(input_path, output_path, status_key):
         # Ensure we have a clean base for the output
         base_output = os.path.splitext(output_path)[0]
         
-        if ext == '.mkv':
-            logger.info(f"Safe import: MKV detected, normalizing to MP4: {input_path}")
+        if ext != '.mp4':
+            logger.info(f"Safe import: Non-MP4 ({ext}) detected, normalizing for web: {input_path}")
             final_path = f"{base_output}.mp4"
-            # Full conversion for MKV as it's often not web-compatible
             cmd = [
                 'ffmpeg', '-i', input_path,
                 '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
@@ -163,10 +161,10 @@ def safe_import_video(input_path, output_path, status_key):
             subprocess.run(cmd, check=True, timeout=Config.PROCESS_TIMEOUT)
             return final_path
         else:
-            logger.info(f"Safe import: Using source format ({ext}) for: {input_path}")
-            # Keep original extension to avoid normalization
-            final_path = f"{base_output}{ext}"
-            shutil.copy2(input_path, final_path)
+            logger.info(f"Safe import: Keeping original MP4: {input_path}")
+            final_path = f"{base_output}.mp4"
+            if input_path != final_path:
+                shutil.copy2(input_path, final_path)
             return final_path
             
     except Exception as e:

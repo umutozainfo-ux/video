@@ -21,7 +21,78 @@ document.addEventListener('DOMContentLoaded', () => {
     loadProjects();
     requestNotificationPermission();
     loadSavedStyles();
+    registerServiceWorker();
 });
+
+// --- PWA Service Worker ---
+let newWorker;
+
+function registerServiceWorker() {
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js').then(reg => {
+                console.log('SW Registered:', reg);
+
+                reg.addEventListener('updatefound', () => {
+                    newWorker = reg.installing;
+                    newWorker.addEventListener('statechange', () => {
+                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            showUpdateNotification();
+                        }
+                    });
+                });
+            }).catch(err => console.log('SW Registration Failed:', err));
+        });
+
+        let refreshing;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (refreshing) return;
+            window.location.reload();
+            refreshing = true;
+        });
+    }
+}
+
+function showUpdateNotification() {
+    const btn = document.getElementById('pwaUpdateBtn');
+    const txt = document.getElementById('pwaBtnText');
+    if (btn && txt) {
+        btn.style.background = 'rgba(239, 68, 68, 0.1)';
+        btn.style.color = 'var(--danger)';
+        txt.innerHTML = `Update Available`;
+        document.querySelector('#pwaUpdateBtn i').classList.add('fa-spin');
+        showError('New update available! Click the red button in sidebar.', false);
+    }
+}
+
+function updatePWA() {
+    const btn = document.getElementById('pwaUpdateBtn');
+    const txt = document.getElementById('pwaBtnText');
+
+    if (newWorker) {
+        if (txt) txt.textContent = "Updating...";
+        newWorker.postMessage({ type: 'SKIP_WAITING' });
+    } else {
+        // Manual check / Refresh
+        if (txt) txt.textContent = "Checking...";
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistration().then(reg => {
+                if (reg) {
+                    reg.update().then(() => {
+                        if (!reg.installing && !reg.waiting) {
+                            if (txt) txt.textContent = "Up to date!";
+                            setTimeout(() => { if (txt) txt.textContent = "Check Updates"; }, 2000);
+                        }
+                    });
+                } else {
+                    window.location.reload();
+                }
+            });
+        } else {
+            window.location.reload();
+        }
+    }
+}
 
 function loadSavedStyles() {
     const saved = localStorage.getItem('ag_caption_style');

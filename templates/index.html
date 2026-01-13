@@ -41,6 +41,11 @@
         {% endif %}
     </nav>
     <div class="sidebar-footer">
+        <button id="pwaUpdateBtn" class="nav-item"
+            style="border:none; background:rgba(99, 102, 241, 0.1); width:calc(100% - 24px); margin: 0 12px 8px; border-radius: 8px; cursor:pointer; color:var(--primary); display:flex; align-items:center; gap:12px; padding: 10px 16px; font-size:0.9rem; transition: 0.2s;"
+            onclick="updatePWA()">
+            <i class="fas fa-sync-alt nav-icon"></i> <span id="pwaBtnText">Check Updates</span>
+        </button>
         <a href="/logout" class="nav-item" style="color: var(--danger);">
             <i class="fas fa-sign-out-alt nav-icon"></i> Logout
         </a>

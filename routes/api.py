@@ -396,7 +396,12 @@ def serve_video(project_id, filename):
     if not found_path:
         return jsonify({'error': 'Video file not found'}), 404
         
-    return send_file(found_path, mimetype='video/mp4', as_attachment=False, conditional=True)
+    import mimetypes
+    mime_type, _ = mimetypes.guess_type(found_path)
+    if not mime_type or not mime_type.startswith('video/'):
+        mime_type = 'video/mp4'
+        
+    return send_file(found_path, mimetype=mime_type, as_attachment=False, conditional=True)
 
 # --- Storage Management ---
 
@@ -657,9 +662,15 @@ def stream_video(project_id, filename):
 
     file_path = found_path
 
+    import mimetypes
+    mime_type, _ = mimetypes.guess_type(file_path)
+    if not mime_type or not mime_type.startswith('video/'):
+        mime_type = 'video/mp4'
+
     range_header = request.headers.get('Range', None)
     if not range_header:
-        return send_file(file_path, mimetype='video/mp4', conditional=True)
+        # Avoid forcing download by ensuring as_attachment is False and mimetype is correct
+        return send_file(file_path, mimetype=mime_type, as_attachment=False, conditional=True)
     
     size = os.path.getsize(file_path)
     byte1, byte2 = 0, size - 1
@@ -674,8 +685,10 @@ def stream_video(project_id, filename):
         f.seek(byte1)
         data = f.read(length)
     
-    rv = Response(data, 206, mimetype='video/mp4', direct_passthrough=True)
+    rv = Response(data, 206, mimetype=mime_type, direct_passthrough=True)
     rv.headers.add('Content-Range', f'bytes {byte1}-{byte2}/{size}')
     rv.headers.add('Accept-Ranges', 'bytes')
     rv.headers.add('Content-Length', str(length))
+    # Ensure it's treated as inline
+    rv.headers.add('Content-Disposition', 'inline')
     return rv
