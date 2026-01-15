@@ -16,6 +16,7 @@ import logging
 import atexit
 import asyncio
 from dotenv import load_dotenv
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 load_dotenv()
 
@@ -25,6 +26,7 @@ socketio = SocketIO(cors_allowed_origins="*", async_mode='threading')
 
 def create_app():
     app = Flask(__name__)
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
     app.config.from_object(Config)
     
     # Initialize directories

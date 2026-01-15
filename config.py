@@ -27,7 +27,11 @@ class Config:
     
     # Security
     SECRET_KEY = os.environ.get('SECRET_KEY', 'default-secret-key-12345')
-    SESSION_COOKIE_SAMESITE = 'Lax'
+    
+    # Hugging Face Spaces specific session settings (needed for iframes)
+    # When viewed on huggingface.co, the app is in an iframe which requires SameSite=None and Secure=True
+    SESSION_COOKIE_SAMESITE = 'None' if os.environ.get('SPACE_ID') else 'Lax'
+    SESSION_COOKIE_SECURE = True if os.environ.get('SPACE_ID') else False
 
 
 

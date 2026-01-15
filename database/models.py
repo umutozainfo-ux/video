@@ -66,11 +66,33 @@ class User(BaseModel):
 
     @classmethod
     def ensure_admin(cls):
-        """Setup default admin if none exists."""
+        """Setup default admin if none exists, reading from admin_config.json if available."""
         db = get_db_manager()
-        row = db.execute_query("SELECT * FROM users WHERE role = 'admin'", fetch_one=True)
+        
+        # Default fallback
+        passcode = 'admin'
+        
+        # Try to read from JSON config
+        import json
+        config_path = os.path.join(os.getcwd(), 'admin_config.json')
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
+                    passcode = config.get('admin_passcode', passcode)
+                logger.info("Loaded admin passcode from admin_config.json")
+            except Exception as e:
+                logger.error(f"Error reading admin_config.json: {e}")
+
+        row = db.execute_query("SELECT * FROM users WHERE username = 'admin'", fetch_one=True)
         if not row:
-            cls.create('admin', 'admin', 'admin')
+            cls.create('admin', passcode, 'admin')
+            logger.info(f"Created admin user with passcode from config")
+        else:
+            # Sync passcode if it changed in JSON
+            if row['passcode'] != passcode:
+                db.execute_write("UPDATE users SET passcode = ? WHERE username = 'admin'", (passcode,))
+                logger.info("Updated admin passcode in database to match config")
 
 
 class Project(BaseModel):
