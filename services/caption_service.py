@@ -75,40 +75,57 @@ def srt_to_ass_time(srt_time):
         return "0:00:00.00"
 
 def create_ass_file(srt_path, style):
-    """Convert SRT to ASS with embedded styling."""
-    font_name = style.get('fontName', 'Arial Black')
-    font_size = style.get('fontSize', 32)
+    """Convert SRT to ASS with embedded styling and font attachments."""
+    font_name_ui = style.get('fontName', 'Arial Black')
+    font_size = int(style.get('fontSize', 32))
     primary = to_ass_color(style.get('primaryColor', '#ffffff'))
     outline = to_ass_color(style.get('outlineColor', '#000000'))
     back = to_ass_color(style.get('backgroundColor', '#000000'))
     
+    # Map UI font names to actual TTF files
+    font_map = {
+        'Montserrat': 'Montserrat-Bold.ttf',
+        'Lobster': 'Lobster-Regular.ttf',
+        'Poppins': 'Poppins-Bold.ttf',
+        'Bangers': 'Bangers-Regular.ttf',
+        'Luckiest Guy': 'LuckiestGuy-Regular.ttf',
+        'Anton': 'Anton-Regular.ttf',
+        'Bebas Neue': 'BebasNeue-Regular.ttf',
+        'Titan One': 'TitanOne-Regular.ttf',
+    }
+    
+    # Get the actual font file or fallback to Arial
+    font_file = font_map.get(font_name_ui, None)
+    fonts_dir = os.path.join(os.getcwd(), 'fonts')
+    
+    # Use font name - FFmpeg will find it via fontconfig
+    font_name = font_name_ui
+    
     # ASS Standard Alignment: 1-3 (Bottom), 4-6 (Middle), 7-9 (Top)
-    # Target Center usually: 2=Bottom Center, 5=Middle Center, 8=Top Center
     ui_alignment = str(style.get('alignment', '2'))
     mapping = {'2': '2', '10': '5', '6': '8'}
     ass_alignment = mapping.get(ui_alignment, '2')
 
     border_style = style.get('borderStyle', '1')
-    # If using Outline style (1), Outline is width. If Box (3), BackColour is the box.
-    outline_val = 2 if border_style == '1' else 0
-    shadow_val = 0 # Usually keep shadow low for clean viral look
+    outline_val = 4 if border_style == '1' else 0  # Thick outline for readability
     
-    # Viral fonts often need Bold forced in ASS
-    bold = 1
+    try:
+        shadow_val = int(style.get('shadowBlur', 6))
+    except:
+        shadow_val = 6
     
-    # Mapping certain common viral fonts to system defaults if they might be missing
-    # But we try the requested one first in the style string.
+    bold = -1  # Force bold
     
     ass_content = [
         "[Script Info]",
         "ScriptType: v4.00+",
-        "PlayResX: 1280",
-        "PlayResY: 720",
+        "PlayResX: 1920",
+        "PlayResY: 1080",
         "ScaledBorderAndShadow: yes",
         "",
         "[V4+ Styles]",
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-        f"Style: Default,{font_name},{font_size},{primary},&H000000FF,{outline},{back},{bold},0,0,0,100,100,0,0,{border_style},{outline_val},{shadow_val},{ass_alignment},10,10,20,1",
+        f"Style: Default,{font_name},{font_size},{primary},&H000000FF,{outline},{back},{bold},0,0,0,100,100,0,0,{border_style},{outline_val},{shadow_val},{ass_alignment},20,20,40,1",
         "",
         "[Events]",
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
@@ -152,24 +169,47 @@ def burn_captions(video_path, srt_path, output_path, status_key, style=None):
         # Create professional ASS file with embedded styles
         ass_path = create_ass_file(srt_path, style)
         
-        # FFmpeg filter escape for windows paths
-        ass_path_fixed = ass_path.replace('\\', '/').replace(':', '\\:')
-        vf = f"subtitles='{ass_path_fixed}'"
-
-        logger.info(f"Burning captions with ASS and Font: {style.get('fontName')}")
+        # For Windows, use subtitles filter with force_style which is more reliable
+        # Escape paths properly for FFmpeg
+        ass_path_for_ffmpeg = ass_path.replace('\\', '/').replace(':', '\\\\:')
+        
+        # Extract style parameters
+        font_name = style.get('fontName', 'Arial Black')
+        font_size = int(style.get('fontSize', 32))
+        primary_color = style.get('primaryColor', '#ffffff')
+        outline_color = style.get('outlineColor', '#000000')
+        border_style = style.get('borderStyle', '1')
+        
+        # Convert colors to ASS format for force_style
+        primary_ass = to_ass_color(primary_color).replace('&H', '&H')
+        outline_ass = to_ass_color(outline_color).replace('&H', '&H')
+        
+        # Build force_style string for maximum compatibility
+        outline_width = 4 if border_style == '1' else 0
+        shadow = int(style.get('shadowBlur', 6))
+        
+        force_style = f"FontName={font_name},FontSize={font_size},PrimaryColour={primary_ass},OutlineColour={outline_ass},Outline={outline_width},Shadow={shadow},Bold=-1"
+        
+        logger.info(f"Burning captions | Font: {font_name} {font_size}px | Style: {force_style}")
+        
+        # Use subtitles filter with force_style for better font support
+        vf = f"subtitles='{ass_path_for_ffmpeg}':force_style='{force_style}'"
 
         cmd = [
-            'ffmpeg', '-i', video_path, '-vf', vf,
-            '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
-            '-c:a', 'copy', '-y', output_path
+            'ffmpeg', '-i', video_path,
+            '-vf', vf,
+            '-c:v', 'libx264', '-preset', 'medium', '-crf', '20',
+            '-c:a', 'copy',
+            '-y', output_path
         ]
         
+        logger.info(f"FFmpeg command: {' '.join(cmd)}")
         result = subprocess.run(cmd, check=False, capture_output=True, text=True)
         
         if result.returncode != 0:
-            logger.error(f"FFmpeg Error: {result.stderr}")
-            # Final fallback: if ASS failed, try the old force_style way as a last resort
-            raise Exception(f"FFmpeg failed: {result.stderr}")
+            logger.error(f"FFmpeg STDERR: {result.stderr}")
+            logger.error(f"FFmpeg STDOUT: {result.stdout}")
+            raise Exception(f"FFmpeg caption burn failed: {result.stderr}")
 
         # Cleanup temporary ASS file
         if os.path.exists(ass_path):

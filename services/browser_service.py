@@ -109,14 +109,53 @@ class BrowserInstance:
                 "--force-color-profile=srgb"
             ]
 
-            self.browser = await p.chromium.launch(headless=is_headless, args=args)
+            # Load proxy from config if available
+            proxy_config = None
+            try:
+                import json
+                config_path = os.path.join(os.getcwd(), 'admin_config.json')
+                if os.path.exists(config_path):
+                    with open(config_path, 'r') as f:
+                        config = json.load(f)
+                        if config.get('proxy_enabled') and config.get('proxy'):
+                            proxy_str = config['proxy'].strip()
+                            if proxy_str:
+                                if not proxy_str.startswith('http'):
+                                    proxy_str = f'http://{proxy_str}'
+                                proxy_config = {'server': proxy_str}
+                                logger.info(f"Browser will launch with proxy: {proxy_str}")
+            except Exception as e:
+                logger.warning(f"Could not load proxy config: {e}")
+
+            # Optimized launch args from reference
+            args = [
+                "--disable-blink-features=AutomationControlled",
+                "--disable-dev-shm-usage",
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-features=IsolateOrigins,site-per-process",
+                "--disable-gpu",
+                "--force-color-profile=srgb"
+            ]
+
+            self.browser = await p.chromium.launch(
+                headless=is_headless, 
+                args=args,
+                proxy=proxy_config # MUST be here for Playwright to allow context proxies or use global
+            )
             
             ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
-            self.context = await self.browser.new_context(
-                viewport={'width': 1280, 'height': 720},
-                user_agent=ua,
-                bypass_csp=True
-            )
+            
+            context_opts = {
+                'viewport': {'width': 1280, 'height': 720},
+                'user_agent': ua,
+                'bypass_csp': True
+            }
+            # We also keep it in context_opts for good measure, though launch() handles it globally
+            if proxy_config:
+                context_opts['proxy'] = proxy_config
+            
+            self.context = await self.browser.new_context(**context_opts)
             
             await self.context.add_init_script(self.STEALTH_INIT_SCRIPT)
             

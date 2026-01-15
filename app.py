@@ -63,6 +63,10 @@ def create_app():
     # Register blueprints
     app.register_blueprint(pages_bp)
     app.register_blueprint(api_bp, url_prefix='/api')
+    
+    # Import and register settings blueprint
+    from routes.settings import settings_bp
+    app.register_blueprint(settings_bp)
 
     @app.route('/sw.js')
     def serve_sw():

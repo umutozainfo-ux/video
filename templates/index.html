@@ -4,11 +4,13 @@
 {% block extra_css %}
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
 <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Bangers&family=Luckiest+Guy&family=Roboto:wght@700;900&family=Oswald:wght@700&family=Permanent+Marker&family=Righteous&family=Kaushan+Script&family=Anton&family=Archivo+Black&family=Bebas+Neue&family=Fredoka+One&family=Passion+One&family=Titan+One&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Bangers&family=Luckiest+Guy&family=Roboto:wght@700;900&family=Oswald:wght@700&family=Permanent+Marker&family=Righteous&family=Kaushan+Script&family=Anton&family=Archivo+Black&family=Bebas+Neue&family=Fredoka+One&family=Passion+One&family=Titan+One&family=Montserrat:wght@700;900&family=Lobster&family=Poppins:wght@600;800&display=swap"
     rel="stylesheet">
 {% endblock %}
 
 {% block content %}
+{% include '_aspect_modal.html' %}
+{% include '_settings_panel.html' %}
 <!-- Mobile Overlay -->
 <div class="mobile-overlay" id="mobileOverlay" onclick="toggleSidebar()"></div>
 
@@ -60,12 +62,11 @@
             <button class="mobile-menu-btn" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
             <h1 class="page-title" id="pageTitle">Dashboard</h1>
         </div>
-        <div class="user-profile">
-            <div class="user-info" style="text-align:right;">
-                <div style="font-weight:600; font-size:0.9rem;">{{ 'Administrator' if user_role == 'admin' else 'Editor'
-                    }}</div>
-                <div style="font-size:0.75rem; color:var(--text-muted);">{{ user_role|capitalize }} Account</div>
-            </div>
+        <div style="display:flex; gap:12px; align-items:center;">
+            <button class="btn btn-secondary" onclick="openSettingsPanel()" title="Cookie & Proxy Settings"
+                style="padding:8px 16px; font-size:0.9rem;">
+                <i class="fas fa-cog"></i> Settings
+            </button>
             <div class="user-avatar">
                 <i class="fas fa-user"></i>
             </div>
@@ -247,8 +248,10 @@
                     </div>
 
                     <div style="position:relative; width:100%; max-width:600px; margin:0 auto;">
-                        <video id="videoPlayer" controls
-                            style="width:100%; border-radius:var(--radius-sm); border:1px solid #000; background:black;"></video>
+                        <video id="videoPlayer" controls playsinline preload="auto"
+                            style="width:100%; border-radius:var(--radius-sm); border:1px solid #000; background:black;">
+                            <source id="videoSource" type="video/mp4">
+                        </video>
                     </div>
 
                     <!-- Split Settings Panel (Hidden by default) -->
@@ -307,7 +310,7 @@
                     </div>
 
                     <div id="captionLinks" style="margin-top:20px; text-align:left;"></div>
-                    <a id="downloadLink" class="btn btn-primary" style="margin-top:20px; display:inline-flex;" download>
+                    <a id="downloadLink" class="btn btn-primary" style="margin-top:20px; display:inline-flex;">
                         <i class="fas fa-download"></i> Download Video
                     </a>
 
@@ -698,7 +701,7 @@
 <div id="reelModal" class="reel-modal">
     <div class="reel-close" onclick="closeReelView()">✕</div>
     <div class="reel-container">
-        <video id="reelVideo" class="reel-video" loop></video>
+        <video id="reelVideo" class="reel-video" loop playsinline preload="auto"></video>
         <div class="reel-nav">
             <div class="reel-btn" onclick="prevReel()" title="Previous Clip"><i class="fas fa-chevron-up"></i></div>
             <div class="reel-btn" onclick="nextReel()" title="Next Clip"><i class="fas fa-chevron-down"></i></div>

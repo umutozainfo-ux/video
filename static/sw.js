@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ag-video-editor-v1768377203';
+const CACHE_NAME = 'ag-video-editor-v1768468589';
 const ASSETS_TO_CACHE = [
     '/',
     '/static/css/style.css',

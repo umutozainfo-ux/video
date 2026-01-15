@@ -1,0 +1,252 @@
+<!-- Cookie & Proxy Settings Panel -->
+<div id="settingsPanel"
+    style="display:none; position:fixed; top:70px; right:20px; width:400px; background:#fff; border-radius:16px; box-shadow:0 10px 40px rgba(0,0,0,0.2); z-index:9000; padding:24px; max-height:calc(100vh - 100px); overflow-y:auto;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+        <h3 style="margin:0; font-size:1.25rem; font-weight:700;">⚙️ Download Settings</h3>
+        <button onclick="closeSettingsPanel()"
+            style="background:none; border:none; font-size:1.5rem; cursor:pointer; color:#666;">&times;</button>
+    </div>
+
+    <!-- Cookies Section -->
+    <div style="margin-bottom:24px;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+            <h4 style="margin:0; font-size:1rem; font-weight:600;">🍪 Cookies</h4>
+            <span id="cookieStatus"
+                style="font-size:0.75rem; padding:2px 8px; border-radius:4px; background:#e5e7eb; color:#6b7280;">Not
+                Loaded</span>
+        </div>
+        <p style="font-size:0.85rem; color:#6b7280; margin-bottom:12px;">
+            For age-restricted or login-required videos. Export from browser with "Get cookies.txt" extension.
+        </p>
+        <div style="display:flex; gap:8px;">
+            <label class="btn btn-secondary"
+                style="flex:1; margin:0; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:4px;">
+                <i class="fas fa-upload"></i> Upload
+                <input type="file" id="cookieFileInput" accept=".txt" style="display:none;"
+                    onchange="uploadCookies(event)">
+            </label>
+            <button id="deleteCookiesBtn" class="btn btn-danger" onclick="deleteCookies()"
+                style="flex:1; display:none;">
+                <i class="fas fa-trash"></i> Delete
+            </button>
+        </div>
+    </div>
+
+    <!-- Proxy Section -->
+    <div>
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+            <h4 style="margin:0; font-size:1rem; font-weight:600;">🌐 Proxy</h4>
+            <label style="display:flex; align-items:center; gap:6px; font-size:0.85rem;">
+                <input type="checkbox" id="proxyEnabled" onchange="toggleProxyEnabled()">
+                <span>Enable</span>
+            </label>
+        </div>
+        <p style="font-size:0.85rem; color:#6b7280; margin-bottom:12px;">
+            Use proxy for downloads and browser. Format: <code
+                style="background:#f3f4f6; padding:2px 6px; border-radius:4px;">IP:PORT</code>
+        </p>
+        <div style="display:flex; gap:8px; margin-bottom:8px;">
+            <input type="text" id="proxyInput" placeholder="186.96.50.113:999"
+                style="flex:1; padding:10px; border:1px solid #d1d5db; border-radius:8px; font-size:0.9rem;">
+            <button class="btn btn-primary" onclick="saveProxySettings()" style="padding:10px 20px;">
+                <i class="fas fa-save"></i> Save
+            </button>
+        </div>
+        <div style="font-size:0.75rem; color:#9ca3af; margin-bottom:12px;">
+            Examples:<br>
+            • <code>159.203.61.169:3128</code><br>
+            • <code>user:pass@proxy.com:8080</code>
+        </div>
+
+        <!-- Speed Test UI -->
+        <div id="proxyTestSection" style="margin-top:12px; display:none;">
+            <button class="btn btn-secondary" id="proxyTestBtn" onclick="testProxySpeed()"
+                style="width:100%; border-color:#d1d5db; display:flex; align-items:center; justify-content:center; gap:8px;">
+                <i class="fas fa-bolt"></i> Test Proxy Speed
+            </button>
+            <div id="proxyTestResult"
+                style="margin-top:10px; font-size:0.8rem; padding:12px; border-radius:8px; background:#f9fafb; display:none; border:1px solid #e5e7eb;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <span>Latency:</span>
+                    <b id="testLatency">-</b>
+                </div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <span>Speed:</span>
+                    <b id="testDownload">-</b>
+                </div>
+                <div style="display:flex; justify-content:space-between;">
+                    <span>Proxy IP:</span>
+                    <b id="testIP">-</b>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notifications Section -->
+    <div style="margin-top:24px; padding-top:16px; border-top:1px solid #e5e7eb;">
+        <h4 style="margin:0 0 12px 0; font-size:1rem; font-weight:600;">🔔 Notifications</h4>
+        <p style="font-size:0.85rem; color:#6b7280; margin-bottom:12px;">
+            Test if your browser allows desktop notifications for job completions.
+        </p>
+        <button class="btn btn-secondary" onclick="testNotification()"
+            style="width:100%; border-color:var(--primary); color:var(--primary);">
+            <i class="fas fa-bell"></i> Send Test Notification
+        </button>
+    </div>
+
+    <div style="margin-top:20px; padding-top:16px; border-top:1px solid #e5e7eb; font-size:0.8rem; color:#9ca3af;">
+        <i class="fas fa-info-circle"></i> Settings apply to browser and all new downloads
+    </div>
+</div>
+
+<script>
+    // Settings Panel Functions
+    function openSettingsPanel() {
+        document.getElementById('settingsPanel').style.display = 'block';
+        loadSettingsPanel();
+    }
+
+    function closeSettingsPanel() {
+        document.getElementById('settingsPanel').style.display = 'none';
+    }
+
+    async function loadSettingsPanel() {
+        // Load cookie status
+        try {
+            const cookieRes = await fetch('/api/settings/cookies');
+            const cookieData = await cookieRes.json();
+            const statusEl = document.getElementById('cookieStatus');
+            const deleteBtnEl = document.getElementById('deleteCookiesBtn');
+
+            if (cookieData.exists) {
+                statusEl.textContent = `Loaded (${(cookieData.size / 1024).toFixed(1)} KB)`;
+                statusEl.style.background = '#d1fae5';
+                statusEl.style.color = '#065f46';
+                deleteBtnEl.style.display = 'block';
+            } else {
+                statusEl.textContent = 'Not Loaded';
+                statusEl.style.background = '#e5e7eb';
+                statusEl.style.color = '#6b7280';
+                deleteBtnEl.style.display = 'none';
+            }
+        } catch (e) {
+            console.error('Failed to load cookie status:', e);
+        }
+
+        // Load proxy settings
+        try {
+            const proxyRes = await fetch('/api/settings/proxy');
+            const proxyData = await proxyRes.json();
+            document.getElementById('proxyInput').value = proxyData.proxy || '';
+            document.getElementById('proxyEnabled').checked = proxyData.proxy_enabled || false;
+            toggleProxyEnabled();
+        } catch (e) {
+            console.error('Failed to load proxy settings:', e);
+        }
+    }
+
+    async function uploadCookies(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const res = await fetch('/api/settings/cookies', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            showError('Cookies uploaded successfully!', false);
+            loadSettingsPanel();
+        } catch (e) {
+            showError('Failed to upload cookies: ' + e.message);
+        }
+    }
+
+    async function deleteCookies() {
+        if (!confirm('Delete cookies.txt? You can upload again later.')) return;
+
+        try {
+            const res = await fetch('/api/settings/cookies', { method: 'DELETE' });
+            showError('Cookies deleted', false);
+            loadSettingsPanel();
+        } catch (e) {
+            showError('Failed to delete cookies: ' + e.message);
+        }
+    }
+
+    function toggleProxyEnabled() {
+        const enabled = document.getElementById('proxyEnabled').checked;
+        const input = document.getElementById('proxyInput');
+        const testSection = document.getElementById('proxyTestSection');
+
+        input.disabled = !enabled;
+        input.style.opacity = enabled ? '1' : '0.5';
+        testSection.style.display = enabled ? 'block' : 'none';
+
+        if (!enabled) {
+            document.getElementById('proxyTestResult').style.display = 'none';
+        }
+    }
+
+    async function saveProxySettings() {
+        const proxy = document.getElementById('proxyInput').value.trim();
+        const enabled = document.getElementById('proxyEnabled').checked;
+
+        try {
+            const res = await fetch('/api/settings/proxy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ proxy, proxy_enabled: enabled })
+            });
+            const data = await res.json();
+            showError('Proxy settings saved!', false);
+        } catch (e) {
+            showError('Failed to save proxy: ' + e.message);
+        }
+    }
+
+    async function testProxySpeed() {
+        const btn = document.getElementById('proxyTestBtn');
+        const resultDiv = document.getElementById('proxyTestResult');
+        const latencyEl = document.getElementById('testLatency');
+        const downloadEl = document.getElementById('testDownload');
+        const ipEl = document.getElementById('testIP');
+
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running Test...';
+        resultDiv.style.display = 'block';
+        resultDiv.style.borderColor = '#e5e7eb';
+        latencyEl.textContent = '...';
+        downloadEl.textContent = '...';
+        ipEl.textContent = '...';
+
+        try {
+            const res = await fetch('/api/settings/proxy/test', { method: 'POST' });
+            const data = await res.json();
+
+            if (data.success) {
+                latencyEl.textContent = data.latency_ms + ' ms';
+                downloadEl.textContent = data.download_speed_kbps + ' KB/s';
+                ipEl.textContent = data.proxy_ip;
+
+                // Color coding
+                if (data.latency_ms < 300) latencyEl.style.color = '#059669';
+                else if (data.latency_ms < 800) latencyEl.style.color = '#d97706';
+                else latencyEl.style.color = '#dc2626';
+
+                resultDiv.style.borderColor = '#059669';
+            } else {
+                resultDiv.innerHTML = `<div style="color:#dc2626; font-weight:600;">Test Failed</div><div style="font-size:0.7rem; color:#6b7280; margin-top:4px;">${data.error || 'Connection Timeout'}</div>`;
+                resultDiv.style.borderColor = '#dc2626';
+            }
+        } catch (e) {
+            resultDiv.innerHTML = `<div style="color:#dc2626; font-weight:600;">Test Failed</div><div style="font-size:0.7rem; color:#6b7280; margin-top:4px;">${e.message}</div>`;
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-bolt"></i> Run Test Again';
+        }
+    }
+</script>

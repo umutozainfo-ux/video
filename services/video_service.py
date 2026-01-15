@@ -22,8 +22,8 @@ from utils.helpers import (
 logger = logging.getLogger(__name__)
 
 @retry_on_failure(max_retries=3, delay=2, exceptions=(yt_dlp.utils.DownloadError, Exception))
-def download_video(url, output_path, status_key, resolution='720'):
-    """Download video using yt-dlp or requests for direct URLs"""
+def download_video(url, output_path, status_key, resolution='720', cookies_file=None, proxy=None):
+    """Download video using yt-dlp with cookie and proxy support"""
     try:
         thread_safe_status_update(status_key, {'status': 'downloading', 'progress': 0})
         platform = detect_platform(url)
@@ -31,7 +31,7 @@ def download_video(url, output_path, status_key, resolution='720'):
         
         if platform == 'direct' and url.lower().endswith(('.mp4', '.webm', '.mov', '.avi', '.mkv', '.flv')):
             base_path = output_path.replace('.%(ext)s', '').replace('%(ext)s', '')
-            return download_direct_video(url, base_path, status_key)
+            return download_direct_video(url, base_path, status_key, proxy=proxy)
         
         # Build format string based on resolution
         if resolution == 'max':
@@ -53,6 +53,16 @@ def download_video(url, output_path, status_key, resolution='720'):
             'merge_output_format': 'mp4'
         }
         
+        # Add cookies if provided
+        if cookies_file and os.path.exists(cookies_file):
+            ydl_opts['cookiefile'] = cookies_file
+            logger.info(f"Using cookies from: {cookies_file}")
+        
+        # Add proxy if provided
+        if proxy:
+            ydl_opts['proxy'] = proxy
+            logger.info(f"Using proxy: {proxy}")
+        
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
         
@@ -64,12 +74,19 @@ def download_video(url, output_path, status_key, resolution='720'):
         raise
 
 @retry_on_failure(max_retries=3, delay=2, exceptions=(requests.RequestException, Exception))
-def download_direct_video(url, output_path, status_key):
-    """Download direct video URL using requests with retry"""
+def download_direct_video(url, output_path, status_key, proxy=None):
+    """Download direct video URL using requests with retry and proxy support"""
     try:
         logger.info(f"Downloading direct video: {url}")
         headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, stream=True, timeout=Config.DOWNLOAD_TIMEOUT, headers=headers)
+        
+        # Setup proxies if provided
+        proxies = None
+        if proxy:
+            proxies = {'http': proxy, 'https': proxy}
+            logger.info(f"Using proxy for direct download: {proxy}")
+        
+        response = requests.get(url, stream=True, timeout=Config.DOWNLOAD_TIMEOUT, headers=headers, proxies=proxies)
         response.raise_for_status()
         
         total_size = int(response.headers.get('content-length', 0))

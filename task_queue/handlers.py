@@ -44,7 +44,7 @@ def get_video_path(video: Dict[str, Any]) -> str:
     return upload_path
 
 def handle_download_job(job: Dict[str, Any]) -> Dict[str, Any]:
-    """Handle video download and conversion job."""
+    """Handle video download and import without auto-cropping."""
     logger.info(f"Processing download job: {job['id']}")
     input_data = job.get('input_data', {})
     url = input_data.get('url')
@@ -65,10 +65,21 @@ def handle_download_job(job: Dict[str, Any]) -> Dict[str, Any]:
     processed_path = os.path.join(Config.UPLOAD_FOLDER, processed_filename)
     
     update_job_progress(job['id'], 10, f"Downloading {resolution}p format...")
-    download_video(url, raw_path, job['id'], resolution=resolution)
     
-    update_job_progress(job['id'], 60, "Converting to vertical format...")
-    convert_to_tiktok_aspect(raw_path, processed_path, job['id'])
+    # Check for cookies.txt in root directory
+    cookies_file = os.path.join(os.getcwd(), 'cookies.txt')
+    if not os.path.exists(cookies_file):
+        cookies_file = None
+    
+    # Get proxy from input_data if provided
+    proxy = input_data.get('proxy')
+    
+    download_video(url, raw_path, job['id'], resolution=resolution, cookies_file=cookies_file, proxy=proxy)
+    
+    update_job_progress(job['id'], 60, "Normalizing video (keeping aspect ratio)...")
+    # CHANGED: Use safe_import_video instead of convert_to_tiktok_aspect
+    # This ensures web-ready MP4 but preserves original aspect ratio
+    safe_import_video(raw_path, processed_path, job['id'])
     
     # Clean up raw file 
     if os.path.exists(raw_path):
@@ -88,7 +99,7 @@ def handle_download_job(job: Dict[str, Any]) -> Dict[str, Any]:
     return {'video_id': video['id'], 'filename': processed_filename}
 
 def handle_upload_job(job: Dict[str, Any]) -> Dict[str, Any]:
-    """Handle upload and conversion job."""
+    """Handle upload and check for sidecar captions."""
     logger.info(f"Processing upload job: {job['id']}")
     input_data = job.get('input_data', {})
     temp_filename = input_data.get('filename')
@@ -106,6 +117,14 @@ def handle_upload_job(job: Dict[str, Any]) -> Dict[str, Any]:
     update_job_progress(job['id'], 30, "Importing video safely...")
     final_path = safe_import_video(temp_path, final_path, job['id'])
     final_filename = os.path.basename(final_path)
+    
+    # Check for sidecar caption (e.g. if we uploaded 'video.mp4', check for 'video.srt')
+    # Note: This is tricky with UUID uploads, but if the user uploaded both, 
+    # the 'title' might help match, or we key off the source. 
+    # For web uploads, this is hard. But for server-side it's easier.
+    # Let's try to match by 'title' if unique? No, that's risky.
+    # Actually, for 'upload', we don't have the original sidecar on the server unless uploaded too.
+    # We will handle sidecar logic in 'browser_import' more reliably.
     
     # Remove original temp file
     if os.path.exists(temp_path) and os.path.abspath(temp_path) != os.path.abspath(final_path):
@@ -431,43 +450,58 @@ def handle_trim_job(job: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def handle_make_vertical_job(job: Dict[str, Any]) -> Dict[str, Any]:
-    """Handle vertical video conversion."""
+def handle_convert_aspect_job(job: Dict[str, Any]) -> Dict[str, Any]:
+    """Handle aspect ratio conversion with multiple options."""
     video_id = job.get('video_id')
+    input_data = job.get('input_data', {})
+    aspect = input_data.get('aspect', '9:16')
+    
     if not video_id: raise ValueError("video_id required")
     
     video = Video.get_by_id(video_id)
     video_path = get_video_path(video)
     
-    output_filename = f"vertical_{video['filename']}"
+    # Aspect ratio presets
+    aspect_configs = {
+        '9:16': {'width': 1080, 'height': 1920, 'label': 'Vertical'},  # TikTok, Reels
+        '16:9': {'width': 1920, 'height': 1080, 'label': 'Landscape'},  # YouTube
+        '1:1': {'width': 1080, 'height': 1080, 'label': 'Square'},  # Instagram
+        '4:5': {'width': 1080, 'height': 1350, 'label': 'Portrait'},  # Instagram Feed
+        '21:9': {'width': 2560, 'height': 1080, 'label': 'Ultrawide'},  # Cinematic
+    }
+    
+    if aspect not in aspect_configs:
+        aspect = '9:16'
+    
+    config = aspect_configs[aspect]
+    output_filename = f"{config['label'].lower()}_{video['filename']}"
     output_path = os.path.join(Config.PROCESSED_FOLDER, output_filename)
     
-    update_job_progress(job['id'], 20, "Detecting dimensions...")
+    update_job_progress(job['id'], 20, f"Converting to {config['label']} ({aspect})...")
     
-    # FFmpeg command to force 9:16 aspect ratio (1080x1920)
-    # Uses crop if landscape, or padding if thin
-    vf = "scale=w=1080:h=1920:force_original_aspect_ratio=increase,crop=1080:1920"
+    # Smart scaling: crop if larger, pad if smaller
+    vf = f"scale=w={config['width']}:h={config['height']}:force_original_aspect_ratio=increase,crop={config['width']}:{config['height']}"
     
     cmd = [
         'ffmpeg', '-i', video_path,
-        '-vf', vf, '-c:v', 'libx264', '-preset', 'veryfast',
-        '-crf', '23', '-c:a', 'copy', '-y', output_path
+        '-vf', vf, '-c:v', 'libx264', '-preset', 'medium',
+        '-crf', '20', '-c:a', 'aac', '-b:a', '192k', '-y', output_path
     ]
     
-    update_job_progress(job['id'], 40, "Converting to vertical...")
+    update_job_progress(job['id'], 40, "Processing...")
     import subprocess
     subprocess.run(cmd, check=True)
     
-    vertical_video = Video.create(
+    converted_video = Video.create(
         project_id=video['project_id'],
-        title=f"Vertical - {video['title']}",
+        title=f"{config['label']} - {video['title']}",
         filename=output_filename,
         parent_video_id=video_id,
         is_clip=1,
         size_bytes=os.path.getsize(output_path)
     )
     
-    return {'video_id': vertical_video['id'], 'filename': output_filename}
+    return {'video_id': converted_video['id'], 'filename': output_filename}
 
 
 def handle_browser_import_job(job: Dict[str, Any]) -> Dict[str, Any]:
@@ -504,7 +538,7 @@ def handle_browser_import_job(job: Dict[str, Any]) -> Dict[str, Any]:
         shutil.move(temp_path, final_path.replace('.mp4', os.path.splitext(original_name)[1]))
         final_filename = final_filename.replace('.mp4', os.path.splitext(original_name)[1])
     
-    # Cleanup temp file if it still exists (convert_to_tiktok_aspect doesn't delete input)
+    # Cleanup temp file if it still exists
     if os.path.exists(temp_path):
         try: os.remove(temp_path)
         except: pass
@@ -516,6 +550,24 @@ def handle_browser_import_job(job: Dict[str, Any]) -> Dict[str, Any]:
         filename=final_filename,
         size_bytes=size_bytes
     )
+
+    # Check for sidecar captions
+    base_source_path = os.path.splitext(input_data.get('temp_path'))[0]
+    for cap_ext in ['.srt', '.ass', '.vtt']:
+        sidecar_path = base_source_path + cap_ext
+        if os.path.exists(sidecar_path):
+            logger.info(f"Found sidecar caption: {sidecar_path}")
+            cap_filename = f"{os.path.splitext(final_filename)[0]}{cap_ext}"
+            cap_dest = os.path.join(Config.CAPTIONS_FOLDER, cap_filename)
+            import shutil
+            shutil.copy2(sidecar_path, cap_dest)
+            
+            Caption.create(
+                video_id=video['id'],
+                filename=cap_filename,
+                language='en', # Default
+                format=cap_ext.replace('.', '')
+            )
     
     return {'video_id': video['id'], 'filename': final_filename}
 
@@ -528,6 +580,6 @@ JOB_HANDLERS = {
     'split_scenes': handle_split_scenes_job,
     'split_fixed': handle_split_fixed_job,
     'trim': handle_trim_job,
-    'make_vertical': handle_make_vertical_job,
+    'convert_aspect': handle_convert_aspect_job,
     'browser_import': handle_browser_import_job
 }

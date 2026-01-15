@@ -431,12 +431,15 @@ async function openVideo(video) {
     document.getElementById('videoTitle').textContent = video.title || video.filename;
 
     const player = document.getElementById('videoPlayer');
-    player.src = `/api/stream/${video.project_id}/${video.filename}`;
-    player.load();
+    const source = document.getElementById('videoSource');
+    if (source) {
+        source.src = `/api/stream/${video.project_id}/${encodeURIComponent(video.filename)}`;
+        player.load();
+    }
 
     const dlLink = document.getElementById('downloadLink');
     if (dlLink) {
-        dlLink.href = `/api/video/${video.project_id}/${video.filename}`;
+        dlLink.href = `/api/video/${video.project_id}/${encodeURIComponent(video.filename)}`;
         dlLink.style.display = 'inline-flex';
     }
 
@@ -491,6 +494,37 @@ async function deleteCurrentVideo() {
         loadVideos(window.__currentVideo.projectId);
         showError('Video deleted', false);
     } catch (e) { showError(e.message); }
+}
+
+async function makeVertical() {
+    if (!window.__currentVideo) return;
+    document.getElementById('aspectRatioModal').style.display = 'flex';
+}
+
+async function confirmAspectConversion(aspect) {
+    document.getElementById('aspectRatioModal').style.display = 'none';
+    if (!window.__currentVideo) return;
+
+    const labels = {
+        '9:16': 'Vertical (TikTok/Reels)',
+        '16:9': 'Landscape (YouTube)',
+        '1:1': 'Square (Instagram)',
+        '4:5': 'Portrait (Instagram Feed)',
+        '21:9': 'Ultrawide (Cinematic)'
+    };
+
+    try {
+        await fetch(`/api/projects/${window.__currentVideo.projectId}/videos/${window.__currentVideo.id}/convert-aspect`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ aspect })
+        });
+        showError(`Converting to ${labels[aspect]}...`, false);
+    } catch (e) { showError(e.message); }
+}
+
+function closeAspectModal() {
+    document.getElementById('aspectRatioModal').style.display = 'none';
 }
 
 // --- Timeline Logic ---
@@ -652,10 +686,10 @@ function burnCaptions(id, filename) {
 
 function applyPreset(name) {
     const s = {
-        hormozi: { f: 'Arial Black', sz: 32, c: '#ffff00', o: '#000000', a: '2', bs: '1', bg: '#000000', ls: '1', sb: '10' },
-        beast: { f: 'Luckiest Guy', sz: 36, c: '#ffffff', o: '#000000', a: '2', bs: '1', bg: '#000000', ls: '2', sb: '6' },
-        tiktok: { f: 'Bebas Neue', sz: 40, c: '#ffffff', o: '#000000', a: '10', bs: '3', bg: '#000000', ls: '1', sb: '0' },
-        modern: { f: 'Oswald', sz: 28, c: '#ffffff', o: '#3b82f6', a: '2', bs: '1', bg: '#000000', ls: '0', sb: '4' }
+        hormozi: { f: 'Montserrat', sz: 36, c: '#ffff00', o: '#000000', a: '2', bs: '1', bg: '#000000', ls: '0', sb: '12' },
+        beast: { f: 'Luckiest Guy', sz: 42, c: '#ffffff', o: '#000000', a: '2', bs: '1', bg: '#000000', ls: '2', sb: '8' },
+        tiktok: { f: 'Bangers', sz: 40, c: '#ffffff', o: '#000000', a: '10', bs: '3', bg: '#000000', ls: '1', sb: '0' },
+        modern: { f: 'Poppins', sz: 30, c: '#ffffff', o: '#3b82f6', a: '2', bs: '1', bg: '#000000', ls: '0', sb: '4' }
     }[name];
     if (s) {
         document.getElementById('capFontSize').value = s.sz;
@@ -1032,18 +1066,7 @@ async function cleanAllServer() {
     } catch (e) { showError('Cleanup failed'); }
 }
 
-async function makeVertical() {
-    if (!currentVideoId) return showError('No video selected');
-    try {
-        const res = await fetch(`/api/projects/${currentProjectId}/videos/${currentVideoId}/make-vertical`, {
-            method: 'POST'
-        });
-        if (res.ok) {
-            showError('Vertical conversion started', false);
-            startJobMonitor();
-        }
-    } catch (e) { showError('Vertical conversion failed'); }
-}
+
 // --- Remote Browser Logic ---
 let socket = null;
 let browserInitialized = false;
@@ -1370,7 +1393,7 @@ function renderReel(index) {
     const progressEl = document.getElementById('reelProgress');
     const dlBtn = document.getElementById('reelDownloadBtn');
 
-    videoEl.src = `/api/stream/${v.project_id}/${v.filename}`;
+    videoEl.src = `/api/stream/${v.project_id}/${encodeURIComponent(v.filename)}`;
     videoEl.play();
 
     titleEl.textContent = v.title || v.filename;

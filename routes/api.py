@@ -115,6 +115,18 @@ def download():
     if not url or not project_id or not is_valid_url(url):
         return jsonify({'error': 'Invalid URL or project ID'}), 400
     
+    # Load global proxy if enabled
+    proxy = None
+    try:
+        import json
+        config_path = os.path.join(os.getcwd(), 'admin_config.json')
+        if os.path.exists(config_path):
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+                if config.get('proxy_enabled') and config.get('proxy'):
+                    proxy = config['proxy'].strip()
+    except: pass
+
     job_queue = current_app.config['JOB_QUEUE']
     job_id = job_queue.submit_job(
         job_type='download',
@@ -122,7 +134,8 @@ def download():
         input_data={
             'url': url, 
             'title': data.get('title'),
-            'resolution': data.get('resolution', '720')
+            'resolution': data.get('resolution', '720'),
+            'proxy': proxy
         },
         priority=data.get('priority', 0)
     )
@@ -184,14 +197,18 @@ def generate_caption(project_id, video_id):
     
     return jsonify({'id': job_id, 'status': 'pending'})
 
-@api_bp.route('/projects/<project_id>/videos/<video_id>/make-vertical', methods=['POST'])
-def make_vertical(project_id, video_id):
+@api_bp.route('/projects/<project_id>/videos/<video_id>/convert-aspect', methods=['POST'])
+def convert_aspect(project_id, video_id):
+    """Convert video to different aspect ratios with multiple options"""
+    data = request.get_json(force=True, silent=True) or {}
+    aspect = data.get('aspect', '9:16')  # Default to vertical
+    
     job_queue = current_app.config['JOB_QUEUE']
     job_id = job_queue.submit_job(
-        job_type='make_vertical',
+        job_type='convert_aspect',
         project_id=project_id,
         video_id=video_id,
-        input_data={}
+        input_data={'aspect': aspect}
     )
     return jsonify({'id': job_id, 'status': 'pending'})
 
@@ -638,13 +655,15 @@ def delete_file():
 
 @api_bp.route('/stream/<project_id>/<filename>')
 def stream_video(project_id, filename):
-    filename = secure_filename(filename)
+    # Prevent directory traversal
+    filename = os.path.basename(filename)
     
-    # Check possible locations (Same as serve_video)
+    # Check possible locations
     paths = [
         os.path.join(Config.PROCESSED_FOLDER, filename),
         os.path.join(Config.UPLOAD_FOLDER, filename),
     ]
+    
     found_path = None
     for p in paths:
         if os.path.exists(p):
@@ -652,43 +671,65 @@ def stream_video(project_id, filename):
             break
             
     if not found_path:
+        # Deep search in processed folder (for clips)
         for root, dirs, files in os.walk(Config.PROCESSED_FOLDER):
             if filename in files:
                 found_path = os.path.join(root, filename)
                 break
                 
     if not found_path:
+        logger.warning(f"Stream: File not found: {filename}")
         return jsonify({'error': 'Video file not found'}), 404
 
-    file_path = found_path
-
     import mimetypes
-    mime_type, _ = mimetypes.guess_type(file_path)
-    if not mime_type or not mime_type.startswith('video/'):
+    mime_type, _ = mimetypes.guess_type(found_path)
+    if filename.lower().endswith('.mp4'):
+        mime_type = 'video/mp4'
+    elif not mime_type or not mime_type.startswith('video/'):
         mime_type = 'video/mp4'
 
+    size = os.path.getsize(found_path)
     range_header = request.headers.get('Range', None)
+
+    def _add_common_headers(res):
+        res.headers.add('Content-Disposition', 'inline')
+        res.headers.add('Accept-Ranges', 'bytes')
+        res.headers.add('X-Content-Type-Options', 'nosniff')
+        res.headers.add('Cache-Control', 'no-cache') # Don't cache during stream to avoid mixups
+        return res
+
     if not range_header:
-        # Avoid forcing download by ensuring as_attachment is False and mimetype is correct
-        return send_file(file_path, mimetype=mime_type, as_attachment=False, conditional=True)
-    
-    size = os.path.getsize(file_path)
-    byte1, byte2 = 0, size - 1
-    m = re.search(r'(\d+)-(\d*)', range_header)
-    if m:
-        g = m.groups()
-        if g[0]: byte1 = int(g[0])
-        if g[1]: byte2 = int(g[1])
-    
-    length = byte2 - byte1 + 1
-    with open(file_path, 'rb') as f:
-        f.seek(byte1)
-        data = f.read(length)
-    
-    rv = Response(data, 206, mimetype=mime_type, direct_passthrough=True)
-    rv.headers.add('Content-Range', f'bytes {byte1}-{byte2}/{size}')
-    rv.headers.add('Accept-Ranges', 'bytes')
-    rv.headers.add('Content-Length', str(length))
-    # Ensure it's treated as inline
-    rv.headers.add('Content-Disposition', 'inline')
-    return rv
+        # Full file request
+        logger.info(f"Streaming full video (200): {found_path}")
+        response = send_file(found_path, mimetype=mime_type, as_attachment=False)
+        return _add_common_headers(response)
+
+    # Range request (Seeking)
+    try:
+        m = re.search(r'bytes=(\d+)-(\d*)', range_header)
+        if not m:
+            return send_file(found_path, mimetype=mime_type, as_attachment=False)
+
+        byte1, byte2 = m.groups()
+        byte1 = int(byte1)
+        byte2 = int(byte2) if byte2 else size - 1
+
+        if byte1 >= size:
+            return Response("Range Not Satisfiable", status=416)
+
+        length = byte2 - byte1 + 1
+        
+        # Read the requested chunk
+        with open(found_path, 'rb') as f:
+            f.seek(byte1)
+            data = f.read(length)
+
+        rv = Response(data, 206, mimetype=mime_type, direct_passthrough=True)
+        rv.headers.add('Content-Range', f'bytes {byte1}-{byte2}/{size}')
+        rv = _add_common_headers(rv)
+        rv.headers.add('Content-Length', str(length))
+        logger.debug(f"Streaming range {byte1}-{byte2} for {filename}")
+        return rv
+    except Exception as e:
+        logger.error(f"Error in range streaming for {filename}: {e}")
+        return send_file(found_path, mimetype=mime_type, as_attachment=False)

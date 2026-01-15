@@ -1,3 +1,5 @@
 {
-    "admin_passcode": "mkpass"
+  "admin_passcode": "mkpass",
+  "proxy": "103.132.54.18:8080",
+  "proxy_enabled": true
 }

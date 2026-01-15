@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y \
     xvfb \
     wget \
     gnupg \
+    fontconfig \
     && rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user and set up the app directory
